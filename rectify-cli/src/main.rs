@@ -28,5 +28,7 @@ fn main() -> Result<()> {
 
     println!("undistorted: {}", result.undistorted_path.display());
     println!("transform: {}", result.transform_path.display());
+    println!("debug overlay: {}", result.debug_overlay_path.display());
+    println!("grid debug: {}", result.grid_debug_path.display());
     Ok(())
 }

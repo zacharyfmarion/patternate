@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::{
     calibration::CalibrationProfile,
+    grid_detect::detect_grid,
     image_io::load_image,
     metadata::{ImageMetadata, TransformMetadata},
     undistort::undistort_image,
@@ -23,6 +24,8 @@ pub struct Phase1Request {
 pub struct Phase1Result {
     pub undistorted_path: PathBuf,
     pub transform_path: PathBuf,
+    pub debug_overlay_path: PathBuf,
+    pub grid_debug_path: PathBuf,
 }
 
 pub fn run_phase1(request: &Phase1Request) -> Result<Phase1Result> {
@@ -47,6 +50,18 @@ pub fn run_phase1(request: &Phase1Request) -> Result<Phase1Result> {
         .save(&undistorted_path)
         .with_context(|| format!("failed to save {}", undistorted_path.display()))?;
 
+    let grid_detection = detect_grid(&undistorted);
+    let debug_overlay_path = request.output_dir.join("debug_overlay.png");
+    grid_detection
+        .overlay
+        .save(&debug_overlay_path)
+        .with_context(|| format!("failed to save {}", debug_overlay_path.display()))?;
+
+    let grid_debug_path = request.output_dir.join("grid_debug.json");
+    let grid_debug_json = serde_json::to_string_pretty(&grid_detection.debug)?;
+    fs::write(&grid_debug_path, grid_debug_json)
+        .with_context(|| format!("failed to write {}", grid_debug_path.display()))?;
+
     let transform = TransformMetadata {
         schema_version: 1,
         phase: "phase1_undistortion",
@@ -69,6 +84,8 @@ pub fn run_phase1(request: &Phase1Request) -> Result<Phase1Result> {
     Ok(Phase1Result {
         undistorted_path,
         transform_path,
+        debug_overlay_path,
+        grid_debug_path,
     })
 }
 
@@ -132,12 +149,18 @@ mod tests {
 
         assert!(result.undistorted_path.exists());
         assert!(result.transform_path.exists());
+        assert!(result.debug_overlay_path.exists());
+        assert!(result.grid_debug_path.exists());
 
         let transform: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&result.transform_path).unwrap()).unwrap();
         assert_eq!(transform["phase"], "phase1_undistortion");
         assert_eq!(transform["input_image"]["width_px"], 8);
         assert_eq!(transform["undistorted_image"]["height_px"], 6);
+
+        let grid_debug: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&result.grid_debug_path).unwrap()).unwrap();
+        assert!(grid_debug["edge_point_count"].as_u64().unwrap() > 0);
 
         fs::remove_dir_all(temp_root).unwrap();
     }
