@@ -35,6 +35,8 @@ pub struct BoardDetectionSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoardDetectionDebug {
     pub summary: BoardDetectionSummary,
+    /// 3×3 homography mapping board-mm → image-px, row-major (from detector).
+    pub homography_board_mm_to_image: [[f64; 3]; 3],
     pub markers: Vec<BoardDetectionMarker>,
     pub charuco_corners: Vec<CharucoCornerObservation>,
 }

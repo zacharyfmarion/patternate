@@ -54,7 +54,7 @@ pub fn distort_normalized_point(
     (x * radial + x_tangential, y * radial + y_tangential)
 }
 
-fn bilinear_sample_rgb(image: &RgbImage, x: f64, y: f64) -> Rgb<u8> {
+pub fn bilinear_sample_rgb(image: &RgbImage, x: f64, y: f64) -> Rgb<u8> {
     let max_x = image.width().saturating_sub(1) as f64;
     let max_y = image.height().saturating_sub(1) as f64;
     let x = x.clamp(0.0, max_x);

@@ -117,6 +117,7 @@ def detect_board(image_bgr: np.ndarray, spec: dict, board, dictionary):
             "board_outline_image": [[float(x), float(y)] for x, y in outline_image.tolist()],
             "board_reprojection_rmse_px": rmse,
         },
+        "homography_board_mm_to_image": homography.tolist(),
         "markers": marker_list,
         "charuco_corners": charuco_list,
     }
