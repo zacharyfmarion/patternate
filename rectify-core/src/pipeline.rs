@@ -83,13 +83,19 @@ pub fn run_board_detection_checkpoint(
 
     let board_debug_path = request.output_dir.join("board_debug.json");
     let debug_overlay_path = request.output_dir.join("debug_overlay.png");
-    let detection = detect_board(
-        &prepared_input_path,
-        &board_spec,
-        &board_spec_path,
+    let gray = image::open(&prepared_input_path)
+        .with_context(|| format!("failed to reload {} as grayscale", prepared_input_path.display()))?
+        .to_luma8();
+    let detection = detect_board(&gray, &board_spec)?;
+    write_json_pretty_value(
         &board_debug_path,
-        &debug_overlay_path,
+        &serde_json::to_value(&detection.debug)?,
     )?;
+    // Overlay: use the prepared input as placeholder (pure-Rust annotated overlay is not yet implemented).
+    loaded
+        .image
+        .save(&debug_overlay_path)
+        .with_context(|| format!("failed to save {}", debug_overlay_path.display()))?;
 
     let transform = TransformMetadata {
         schema_version: 1,
@@ -154,13 +160,19 @@ pub fn run_rectify(request: &RectifyRequest) -> Result<RectifyRunResult> {
     // --- Stage C: board detection ---
     let board_debug_path = request.output_dir.join("board_debug.json");
     let debug_overlay_path = request.output_dir.join("debug_overlay.png");
-    let detection = detect_board(
-        &prepared_input_path,
-        &board_spec,
-        &board_spec_path,
+    let gray = image::open(&prepared_input_path)
+        .with_context(|| format!("failed to reload {} as grayscale", prepared_input_path.display()))?
+        .to_luma8();
+    let detection = detect_board(&gray, &board_spec)?;
+    write_json_pretty_value(
         &board_debug_path,
-        &debug_overlay_path,
+        &serde_json::to_value(&detection.debug)?,
     )?;
+    // Overlay: use the prepared input as placeholder.
+    loaded
+        .image
+        .save(&debug_overlay_path)
+        .with_context(|| format!("failed to save {}", debug_overlay_path.display()))?;
 
     // --- Stage B: capture quality validation ---
     let quality_path = request.output_dir.join("quality.json");
@@ -269,6 +281,12 @@ fn materialize_board_spec(output_dir: &Path, source: &BoardSpecSource) -> Result
 }
 
 fn write_json_pretty(path: &Path, value: &TransformMetadata) -> Result<()> {
+    let json = serde_json::to_string_pretty(value)?;
+    fs::write(path, json).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
+fn write_json_pretty_value(path: &Path, value: &serde_json::Value) -> Result<()> {
     let json = serde_json::to_string_pretty(value)?;
     fs::write(path, json).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
