@@ -9,6 +9,6 @@
   "marker_size_mm": 11.0,
   "quiet_zone_mm": 8.0,
   "origin": "top_left_corner",
-  "target_paper": "US Letter",
+  "target_paper": "US Letter or A4",
   "notes": "Default printable board for single-photo rectification"
 }
