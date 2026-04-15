@@ -1,0 +1,47 @@
+{
+  "easy": {
+    "returncode": 0,
+    "stdout": "prepared input: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/easy/prepared_input.png\nboard spec: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/easy/refboard_v1.json\ntransform: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/easy/transform.json\ndebug overlay: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/easy/debug_overlay.png\nboard debug: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/easy/board_debug.json\n",
+    "stderr": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s\n     Running `target/debug/rectify-cli --input /Users/zacharymarion/Documents/code/pattern-detector/examples/photos/synthetic_refboard_set/easy.png --output-dir /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/easy`\n",
+    "marker_count": 44,
+    "charuco_corner_count": 70,
+    "confidence": 1.0,
+    "rmse": 0.2007969319820404
+  },
+  "edge_board": {
+    "returncode": 0,
+    "stdout": "prepared input: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/edge_board/prepared_input.png\nboard spec: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/edge_board/refboard_v1.json\ntransform: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/edge_board/transform.json\ndebug overlay: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/edge_board/debug_overlay.png\nboard debug: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/edge_board/board_debug.json\n",
+    "stderr": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.07s\n     Running `target/debug/rectify-cli --input /Users/zacharymarion/Documents/code/pattern-detector/examples/photos/synthetic_refboard_set/edge_board.png --output-dir /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/edge_board`\n",
+    "marker_count": 44,
+    "charuco_corner_count": 70,
+    "confidence": 1.0,
+    "rmse": 0.19877220690250397
+  },
+  "low_light": {
+    "returncode": 0,
+    "stdout": "prepared input: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/low_light/prepared_input.png\nboard spec: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/low_light/refboard_v1.json\ntransform: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/low_light/transform.json\ndebug overlay: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/low_light/debug_overlay.png\nboard debug: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/low_light/board_debug.json\n",
+    "stderr": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.06s\n     Running `target/debug/rectify-cli --input /Users/zacharymarion/Documents/code/pattern-detector/examples/photos/synthetic_refboard_set/low_light.png --output-dir /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/low_light`\n",
+    "marker_count": 44,
+    "charuco_corner_count": 70,
+    "confidence": 1.0,
+    "rmse": 0.19501936435699463
+  },
+  "oblique": {
+    "returncode": 0,
+    "stdout": "prepared input: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/oblique/prepared_input.png\nboard spec: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/oblique/refboard_v1.json\ntransform: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/oblique/transform.json\ndebug overlay: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/oblique/debug_overlay.png\nboard debug: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/oblique/board_debug.json\n",
+    "stderr": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.07s\n     Running `target/debug/rectify-cli --input /Users/zacharymarion/Documents/code/pattern-detector/examples/photos/synthetic_refboard_set/oblique.png --output-dir /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/oblique`\n",
+    "marker_count": 44,
+    "charuco_corner_count": 70,
+    "confidence": 1.0,
+    "rmse": 0.19300031661987305
+  },
+  "partial_occlusion": {
+    "returncode": 0,
+    "stdout": "prepared input: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/partial_occlusion/prepared_input.png\nboard spec: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/partial_occlusion/refboard_v1.json\ntransform: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/partial_occlusion/transform.json\ndebug overlay: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/partial_occlusion/debug_overlay.png\nboard debug: /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/partial_occlusion/board_debug.json\n",
+    "stderr": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.06s\n     Running `target/debug/rectify-cli --input /Users/zacharymarion/Documents/code/pattern-detector/examples/photos/synthetic_refboard_set/partial_occlusion.png --output-dir /Users/zacharymarion/Documents/code/pattern-detector/examples/results/synthetic_refboard_set/partial_occlusion`\n",
+    "marker_count": 41,
+    "charuco_corner_count": 65,
+    "confidence": 0.92987012987013,
+    "rmse": 0.2038899064064026
+  }
+}

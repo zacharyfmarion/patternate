@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "phase": "board_detection_checkpoint",
+  "input_image": {
+    "width_px": 2550,
+    "height_px": 1800
+  },
+  "prepared_image": {
+    "width_px": 2550,
+    "height_px": 1800
+  },
+  "reference_board": {
+    "board_id": "refboard_v1",
+    "squares_x": 11,
+    "squares_y": 8,
+    "square_size_mm": 15.0,
+    "marker_size_mm": 11.0
+  },
+  "board_detection": {
+    "board_id": "refboard_v1",
+    "marker_count": 41,
+    "charuco_corner_count": 65,
+    "confidence": 0.9298701,
+    "board_outline_image": [
+      [
+        470.46182,
+        416.2032
+      ],
+      [
+        1178.5975,
+        423.33887
+      ],
+      [
+        1140.5364,
+        946.6706
+      ],
+      [
+        432.16757,
+        922.33606
+      ]
+    ],
+    "board_reprojection_rmse_px": 0.2038899
+  }
+}

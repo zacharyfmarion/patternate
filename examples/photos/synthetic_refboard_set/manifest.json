@@ -1,0 +1,10 @@
+{
+  "dataset": "synthetic_refboard_set_v1",
+  "files": [
+    "easy.png",
+    "oblique.png",
+    "edge_board.png",
+    "partial_occlusion.png",
+    "low_light.png"
+  ]
+}
