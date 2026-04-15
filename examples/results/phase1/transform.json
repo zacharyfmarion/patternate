@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "phase": "phase1_undistortion",
+  "input_image": {
+    "width_px": 4032,
+    "height_px": 3024
+  },
+  "undistorted_image": {
+    "width_px": 4032,
+    "height_px": 3024
+  },
+  "calibration_profile_id": "identity",
+  "intrinsics_used": {
+    "fx": 3000.0,
+    "fy": 3000.0,
+    "cx": 2016.0,
+    "cy": 1512.0
+  },
+  "distortion_used": {
+    "model": "brown_conrady",
+    "k1": 0.0,
+    "k2": 0.0,
+    "k3": 0.0,
+    "p1": 0.0,
+    "p2": 0.0
+  }
+}
