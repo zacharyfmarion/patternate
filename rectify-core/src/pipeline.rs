@@ -6,29 +6,31 @@ use std::{
 use anyhow::{Context, Result};
 
 use crate::{
-    calibration::CalibrationProfile,
-    grid_detect::detect_grid,
+    board_detect::detect_board,
+    board_spec::{BoardSpecSource, load_board_spec},
     image_io::load_image,
-    metadata::{ImageMetadata, TransformMetadata},
-    undistort::undistort_image,
+    metadata::{ImageMetadata, ReferenceBoardMetadata, TransformMetadata},
 };
 
 #[derive(Debug, Clone)]
-pub struct Phase1Request {
+pub struct BoardDetectionRequest {
     pub input_path: PathBuf,
-    pub calibration_path: PathBuf,
+    pub board_spec_source: BoardSpecSource,
     pub output_dir: PathBuf,
 }
 
 #[derive(Debug, Clone)]
-pub struct Phase1Result {
-    pub undistorted_path: PathBuf,
-    pub transform_path: PathBuf,
+pub struct BoardDetectionRunResult {
+    pub prepared_input_path: PathBuf,
     pub debug_overlay_path: PathBuf,
-    pub grid_debug_path: PathBuf,
+    pub board_debug_path: PathBuf,
+    pub transform_path: PathBuf,
+    pub board_spec_path: PathBuf,
 }
 
-pub fn run_phase1(request: &Phase1Request) -> Result<Phase1Result> {
+pub fn run_board_detection_checkpoint(
+    request: &BoardDetectionRequest,
+) -> Result<BoardDetectionRunResult> {
     fs::create_dir_all(&request.output_dir).with_context(|| {
         format!(
             "failed to create output directory {}",
@@ -37,56 +39,69 @@ pub fn run_phase1(request: &Phase1Request) -> Result<Phase1Result> {
     })?;
 
     let loaded = load_image(&request.input_path)?;
-    let calibration = CalibrationProfile::from_path(&request.calibration_path)?;
-    let scaled = calibration.scaled_for_image_dimensions(
-        loaded.image.width(),
-        loaded.image.height(),
-    )?;
+    let board_spec = load_board_spec(&request.board_spec_source)?;
+    let board_spec_path = materialize_board_spec(&request.output_dir, &request.board_spec_source)?;
 
-    let undistorted = undistort_image(&loaded.image, &scaled.intrinsics, &scaled.distortion);
+    let prepared_input_path = request.output_dir.join("prepared_input.png");
+    loaded
+        .image
+        .save(&prepared_input_path)
+        .with_context(|| format!("failed to save {}", prepared_input_path.display()))?;
 
-    let undistorted_path = request.output_dir.join("undistorted.png");
-    undistorted
-        .save(&undistorted_path)
-        .with_context(|| format!("failed to save {}", undistorted_path.display()))?;
-
-    let grid_detection = detect_grid(&undistorted);
+    let board_debug_path = request.output_dir.join("board_debug.json");
     let debug_overlay_path = request.output_dir.join("debug_overlay.png");
-    grid_detection
-        .overlay
-        .save(&debug_overlay_path)
-        .with_context(|| format!("failed to save {}", debug_overlay_path.display()))?;
-
-    let grid_debug_path = request.output_dir.join("grid_debug.json");
-    let grid_debug_json = serde_json::to_string_pretty(&grid_detection.debug)?;
-    fs::write(&grid_debug_path, grid_debug_json)
-        .with_context(|| format!("failed to write {}", grid_debug_path.display()))?;
+    let detection = detect_board(
+        &prepared_input_path,
+        &board_spec,
+        &board_spec_path,
+        &board_debug_path,
+        &debug_overlay_path,
+    )?;
 
     let transform = TransformMetadata {
         schema_version: 1,
-        phase: "phase1_undistortion",
+        phase: "board_detection_checkpoint",
         input_image: ImageMetadata {
+            width_px: loaded.original_width_px,
+            height_px: loaded.original_height_px,
+        },
+        prepared_image: ImageMetadata {
             width_px: loaded.image.width(),
             height_px: loaded.image.height(),
         },
-        undistorted_image: ImageMetadata {
-            width_px: undistorted.width(),
-            height_px: undistorted.height(),
+        reference_board: ReferenceBoardMetadata {
+            board_id: board_spec.board_id.clone(),
+            squares_x: board_spec.squares_x,
+            squares_y: board_spec.squares_y,
+            square_size_mm: board_spec.square_size_mm,
+            marker_size_mm: board_spec.marker_size_mm,
         },
-        calibration_profile_id: scaled.profile_id,
-        intrinsics_used: scaled.intrinsics,
-        distortion_used: scaled.distortion,
+        board_detection: detection.debug.summary.clone(),
     };
 
     let transform_path = request.output_dir.join("transform.json");
     write_json_pretty(&transform_path, &transform)?;
 
-    Ok(Phase1Result {
-        undistorted_path,
-        transform_path,
+    Ok(BoardDetectionRunResult {
+        prepared_input_path,
         debug_overlay_path,
-        grid_debug_path,
+        board_debug_path,
+        transform_path,
+        board_spec_path,
     })
+}
+
+fn materialize_board_spec(output_dir: &Path, source: &BoardSpecSource) -> Result<PathBuf> {
+    match source {
+        BoardSpecSource::Path(path) => Ok(path.clone()),
+        BoardSpecSource::BuiltIn(board_id) => {
+            let spec = load_board_spec(source)?;
+            let path = output_dir.join(format!("{board_id}.json"));
+            let json = serde_json::to_string_pretty(&spec)?;
+            fs::write(&path, json).with_context(|| format!("failed to write {}", path.display()))?;
+            Ok(path)
+        }
+    }
 }
 
 fn write_json_pretty(path: &Path, value: &TransformMetadata) -> Result<()> {
@@ -99,14 +114,12 @@ fn write_json_pretty(path: &Path, value: &TransformMetadata) -> Result<()> {
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use image::{ImageBuffer, Rgb};
-
     use super::*;
 
     #[test]
-    fn phase1_pipeline_emits_expected_outputs() {
+    fn board_detection_checkpoint_emits_expected_outputs() {
         let temp_root = std::env::temp_dir().join(format!(
-            "rectify-core-phase1-{}",
+            "rectify-core-board-checkpoint-{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -114,53 +127,26 @@ mod tests {
         ));
         fs::create_dir_all(&temp_root).unwrap();
 
-        let input_path = temp_root.join("input.png");
-        let calibration_path = temp_root.join("calibration.json");
         let output_dir = temp_root.join("output");
-
-        let image = ImageBuffer::from_fn(8, 6, |x, y| {
-            Rgb([(x * 10) as u8, (y * 20) as u8, (x * 10 + y * 5) as u8])
-        });
-        image.save(&input_path).unwrap();
-
-        let calibration = r#"
-        {
-          "profile_id": "test_profile",
-          "nominal_image_size": { "width_px": 8, "height_px": 6 },
-          "intrinsics": { "fx": 10.0, "fy": 10.0, "cx": 4.0, "cy": 3.0 },
-          "distortion": {
-            "model": "brown_conrady",
-            "k1": 0.0,
-            "k2": 0.0,
-            "k3": 0.0,
-            "p1": 0.0,
-            "p2": 0.0
-          }
-        }
-        "#;
-        fs::write(&calibration_path, calibration).unwrap();
-
-        let result = run_phase1(&Phase1Request {
-            input_path,
-            calibration_path,
+        let result = run_board_detection_checkpoint(&BoardDetectionRequest {
+            input_path: Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../assets/refboard_v1/refboard_v1_letter.png"),
+            board_spec_source: BoardSpecSource::BuiltIn("refboard_v1".to_string()),
             output_dir: output_dir.clone(),
         })
         .unwrap();
 
-        assert!(result.undistorted_path.exists());
-        assert!(result.transform_path.exists());
+        assert!(result.prepared_input_path.exists());
         assert!(result.debug_overlay_path.exists());
-        assert!(result.grid_debug_path.exists());
+        assert!(result.board_debug_path.exists());
+        assert!(result.transform_path.exists());
+        assert!(result.board_spec_path.exists());
 
         let transform: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&result.transform_path).unwrap()).unwrap();
-        assert_eq!(transform["phase"], "phase1_undistortion");
-        assert_eq!(transform["input_image"]["width_px"], 8);
-        assert_eq!(transform["undistorted_image"]["height_px"], 6);
-
-        let grid_debug: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&result.grid_debug_path).unwrap()).unwrap();
-        assert!(grid_debug["edge_point_count"].as_u64().unwrap() > 0);
+        assert_eq!(transform["phase"], "board_detection_checkpoint");
+        assert_eq!(transform["reference_board"]["board_id"], "refboard_v1");
+        assert!(transform["board_detection"]["marker_count"].as_u64().unwrap() > 0);
 
         fs::remove_dir_all(temp_root).unwrap();
     }
