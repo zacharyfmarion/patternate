@@ -6,6 +6,7 @@ pub mod homography;
 pub mod image_io;
 pub mod metadata;
 pub mod pipeline;
+pub mod quality;
 pub mod undistort;
 pub mod warp;
 
@@ -25,3 +26,4 @@ pub use pipeline::{
     BoardDetectionRequest, BoardDetectionRunResult, RectifyRequest, RectifyRunResult,
     run_board_detection_checkpoint, run_rectify,
 };
+pub use quality::{QualityMetrics, QualityReport, QualityStatus, assess_quality};

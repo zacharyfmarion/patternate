@@ -11,6 +11,7 @@ use crate::{
     homography::{Homography, compute_rectified_bounds},
     image_io::load_image,
     metadata::{ImageMetadata, ReferenceBoardMetadata, ScaleMetadata, TransformMetadata},
+    quality::{QualityReport, assess_quality},
     warp::warp_image,
 };
 
@@ -50,8 +51,10 @@ pub struct RectifyRunResult {
     pub board_debug_path: PathBuf,
     pub rectified_path: PathBuf,
     pub transform_path: PathBuf,
+    pub quality_path: PathBuf,
     pub board_spec_path: PathBuf,
     pub pixels_per_mm: f64,
+    pub quality: QualityReport,
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +162,21 @@ pub fn run_rectify(request: &RectifyRequest) -> Result<RectifyRunResult> {
         &debug_overlay_path,
     )?;
 
+    // --- Stage B: capture quality validation ---
+    let quality_path = request.output_dir.join("quality.json");
+    let quality = assess_quality(&loaded.image, &detection.debug.summary)
+        .unwrap_or_else(|report| report.clone());
+
+    // Write quality.json before checking for failure so it is always emitted.
+    write_quality_json(&quality_path, &quality)?;
+
+    if quality.status == crate::quality::QualityStatus::Fail {
+        anyhow::bail!(
+            "capture quality check failed: {}",
+            quality.warnings.join("; ")
+        );
+    }
+
     // --- Stage D: homography estimation ---
     let h_board_to_image =
         Homography::from_rows(detection.debug.homography_board_mm_to_image);
@@ -225,8 +243,10 @@ pub fn run_rectify(request: &RectifyRequest) -> Result<RectifyRunResult> {
         board_debug_path,
         rectified_path,
         transform_path,
+        quality_path,
         board_spec_path,
         pixels_per_mm,
+        quality,
     })
 }
 
@@ -250,6 +270,12 @@ fn materialize_board_spec(output_dir: &Path, source: &BoardSpecSource) -> Result
 
 fn write_json_pretty(path: &Path, value: &TransformMetadata) -> Result<()> {
     let json = serde_json::to_string_pretty(value)?;
+    fs::write(path, json).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
+fn write_quality_json(path: &Path, report: &QualityReport) -> Result<()> {
+    let json = serde_json::to_string_pretty(report)?;
     fs::write(path, json).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
@@ -327,6 +353,7 @@ mod tests {
         assert!(result.board_debug_path.exists(), "board_debug.json missing");
         assert!(result.rectified_path.exists(), "rectified.png missing");
         assert!(result.transform_path.exists(), "transform.json missing");
+        assert!(result.quality_path.exists(), "quality.json missing");
 
         // transform.json content checks.
         let transform: serde_json::Value =
@@ -344,6 +371,13 @@ mod tests {
         // rectified.png must be a valid, non-empty image.
         let img = image::open(&result.rectified_path).unwrap();
         assert!(img.width() > 0 && img.height() > 0);
+
+        // quality.json must parse and have status ok or warning (not fail).
+        let quality: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&result.quality_path).unwrap()).unwrap();
+        assert_eq!(quality["schema_version"], 1);
+        assert_ne!(quality["status"].as_str().unwrap(), "fail");
+        assert!(quality["metrics"]["blur_score"].as_f64().unwrap() > 0.0);
 
         fs::remove_dir_all(tmp).unwrap();
     }

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use rectify_core::{
-    BoardDetectionRequest, BoardSpecSource, RectifyRequest, run_board_detection_checkpoint,
-    run_rectify,
+    BoardDetectionRequest, BoardSpecSource, QualityStatus, RectifyRequest,
+    run_board_detection_checkpoint, run_rectify,
 };
 
 #[derive(Debug, Parser)]
@@ -110,8 +110,19 @@ fn run_rectify_cmd(args: RectifyArgs) -> Result<()> {
     println!("board spec:     {}", result.board_spec_path.display());
     println!("rectified:      {}", result.rectified_path.display());
     println!("transform:      {}", result.transform_path.display());
+    println!("quality:        {}", result.quality_path.display());
     println!("debug overlay:  {}", result.debug_overlay_path.display());
     println!("board debug:    {}", result.board_debug_path.display());
     println!("scale:          {:.1} px/mm", result.pixels_per_mm);
+
+    let status_str = match result.quality.status {
+        QualityStatus::Ok => "ok",
+        QualityStatus::Warning => "warning",
+        QualityStatus::Fail => "fail",
+    };
+    println!("quality status: {status_str}");
+    for w in &result.quality.warnings {
+        println!("  warning: {w}");
+    }
     Ok(())
 }
