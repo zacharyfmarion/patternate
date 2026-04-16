@@ -1,0 +1,80 @@
+{
+  "scene": "multi_lighting",
+  "description": "Strong vignette + hotspot \u2014 stresses background estimation.",
+  "board_origin_plane_mm": [
+    22.0,
+    40.0
+  ],
+  "board_angle_deg": 0.0,
+  "board_width_mm": 165.0,
+  "board_height_mm": 120.0,
+  "plane_size_mm": [
+    340.0,
+    220.0
+  ],
+  "photo_size_px": [
+    2400,
+    1600
+  ],
+  "ground_truth_polygon_plane_mm": [
+    [
+      210.0,
+      65.0
+    ],
+    [
+      295.0,
+      69.0
+    ],
+    [
+      315.0,
+      99.0
+    ],
+    [
+      306.0,
+      143.0
+    ],
+    [
+      265.0,
+      157.0
+    ],
+    [
+      230.0,
+      137.0
+    ],
+    [
+      215.0,
+      103.0
+    ]
+  ],
+  "ground_truth_polygon_board_mm": [
+    [
+      188.0,
+      25.0
+    ],
+    [
+      273.0,
+      29.0
+    ],
+    [
+      293.0,
+      59.0
+    ],
+    [
+      284.0,
+      103.0
+    ],
+    [
+      243.0,
+      117.0
+    ],
+    [
+      208.0,
+      97.0
+    ],
+    [
+      193.0,
+      63.0
+    ]
+  ],
+  "image": "multi_lighting.png"
+}

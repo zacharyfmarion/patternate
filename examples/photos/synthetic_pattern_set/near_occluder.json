@@ -1,0 +1,80 @@
+{
+  "scene": "near_occluder",
+  "description": "Piece sits next to another dark object \u2014 tests component selection.",
+  "board_origin_plane_mm": [
+    20.0,
+    40.0
+  ],
+  "board_angle_deg": 0.0,
+  "board_width_mm": 165.0,
+  "board_height_mm": 120.0,
+  "plane_size_mm": [
+    360.0,
+    220.0
+  ],
+  "photo_size_px": [
+    2400,
+    1600
+  ],
+  "ground_truth_polygon_plane_mm": [
+    [
+      215.0,
+      60.0
+    ],
+    [
+      300.0,
+      64.0
+    ],
+    [
+      320.0,
+      94.0
+    ],
+    [
+      311.0,
+      138.0
+    ],
+    [
+      270.0,
+      152.0
+    ],
+    [
+      235.0,
+      132.0
+    ],
+    [
+      220.0,
+      98.0
+    ]
+  ],
+  "ground_truth_polygon_board_mm": [
+    [
+      195.0,
+      20.0
+    ],
+    [
+      280.0,
+      24.0
+    ],
+    [
+      300.0,
+      54.0
+    ],
+    [
+      291.0,
+      98.0
+    ],
+    [
+      250.0,
+      112.0
+    ],
+    [
+      215.0,
+      92.0
+    ],
+    [
+      200.0,
+      58.0
+    ]
+  ],
+  "image": "near_occluder.png"
+}

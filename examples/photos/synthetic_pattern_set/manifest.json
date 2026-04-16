@@ -1,0 +1,49 @@
+{
+  "dataset": "synthetic_pattern_set_v1",
+  "plane_px_per_mm": 10.0,
+  "board_asset": "refboard_v1_letter.png",
+  "scenes": [
+    {
+      "name": "dark_on_light",
+      "description": "Dark canvas piece on light paper mat; near fronto-parallel.",
+      "image": "dark_on_light.png",
+      "sidecar": "dark_on_light.json"
+    },
+    {
+      "name": "light_on_dark",
+      "description": "Cream pattern piece on charcoal cutting mat (inverse contrast).",
+      "image": "light_on_dark.png",
+      "sidecar": "light_on_dark.json"
+    },
+    {
+      "name": "curved",
+      "description": "Smooth-curved piece \u2014 tests simplification quality.",
+      "image": "curved.png",
+      "sidecar": "curved.json"
+    },
+    {
+      "name": "notched",
+      "description": "Piece with inward V-notch and sharp concave point.",
+      "image": "notched.png",
+      "sidecar": "notched.json"
+    },
+    {
+      "name": "near_occluder",
+      "description": "Piece sits next to another dark object \u2014 tests component selection.",
+      "image": "near_occluder.png",
+      "sidecar": "near_occluder.json"
+    },
+    {
+      "name": "rotated_board",
+      "description": "Board rotated ~30\u00b0 within the plane; piece at arbitrary angle.",
+      "image": "rotated_board.png",
+      "sidecar": "rotated_board.json"
+    },
+    {
+      "name": "multi_lighting",
+      "description": "Strong vignette + hotspot \u2014 stresses background estimation.",
+      "image": "multi_lighting.png",
+      "sidecar": "multi_lighting.json"
+    }
+  ]
+}

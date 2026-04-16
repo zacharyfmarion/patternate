@@ -1,4 +1,4 @@
-use image::{Rgb, RgbImage};
+use image::{GrayImage, Luma, Rgb, RgbImage};
 
 use crate::homography::{Homography, RectifiedBounds};
 use crate::undistort::bilinear_sample_rgb;
@@ -12,15 +12,29 @@ use crate::undistort::bilinear_sample_rgb;
 /// 2. Map through `h_board_to_image` to get the source pixel.
 /// 3. Bilinear-sample the source.
 ///
-/// Out-of-bounds source samples are filled with `fill_color` (default black).
+/// Out-of-bounds source samples are filled with black.
 pub fn warp_image(
     source: &RgbImage,
     h_board_to_image: &Homography,
     bounds: &RectifiedBounds,
     pixels_per_mm: f64,
 ) -> RgbImage {
+    warp_image_with_validity(source, h_board_to_image, bounds, pixels_per_mm).0
+}
+
+/// Same as `warp_image`, but also returns a `GrayImage` mask marking
+/// every output pixel that was sampled from inside `source`. Valid
+/// pixels are `255`, out-of-bounds pixels are `0`. Useful for downstream
+/// stages that need to ignore the black fill (e.g. segmentation).
+pub fn warp_image_with_validity(
+    source: &RgbImage,
+    h_board_to_image: &Homography,
+    bounds: &RectifiedBounds,
+    pixels_per_mm: f64,
+) -> (RgbImage, GrayImage) {
     let (out_w, out_h) = bounds.output_size_px(pixels_per_mm);
     let mut output = RgbImage::new(out_w, out_h);
+    let mut validity = GrayImage::new(out_w, out_h);
 
     let src_w = source.width() as f64;
     let src_h = source.height() as f64;
@@ -32,17 +46,19 @@ pub fn warp_image(
 
             let (src_x, src_y) = h_board_to_image.transform_point(mm_x, mm_y);
 
-            let pixel = if src_x >= 0.0 && src_x < src_w && src_y >= 0.0 && src_y < src_h {
+            let in_bounds = src_x >= 0.0 && src_x < src_w && src_y >= 0.0 && src_y < src_h;
+            let pixel = if in_bounds {
                 bilinear_sample_rgb(source, src_x, src_y)
             } else {
                 Rgb([0u8, 0, 0])
             };
 
             output.put_pixel(out_x, out_y, pixel);
+            validity.put_pixel(out_x, out_y, Luma([if in_bounds { 255 } else { 0 }]));
         }
     }
 
-    output
+    (output, validity)
 }
 
 #[cfg(test)]

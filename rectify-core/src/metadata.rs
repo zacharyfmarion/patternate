@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+use crate::segment::SegmentationStats;
+
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct ImageMetadata {
     pub width_px: u32,
@@ -43,4 +45,18 @@ pub struct TransformMetadata {
     /// H that maps image-px → board-mm (inverse, used for warping).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub homography_image_to_board_mm: Option<HomographyMatrix>,
+    /// Present only when outline extraction ran successfully.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outline: Option<OutlineMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OutlineMetadata {
+    pub vertex_count_raw: usize,
+    pub vertex_count_simplified: usize,
+    pub simplify_tolerance_mm: f64,
+    pub bounding_box_mm: [f64; 4],
+    pub area_mm2: f64,
+    pub perimeter_mm: f64,
+    pub segmentation: SegmentationStats,
 }

@@ -1,0 +1,80 @@
+{
+  "scene": "light_on_dark",
+  "description": "Cream pattern piece on charcoal cutting mat (inverse contrast).",
+  "board_origin_plane_mm": [
+    18.0,
+    35.0
+  ],
+  "board_angle_deg": 0.0,
+  "board_width_mm": 165.0,
+  "board_height_mm": 120.0,
+  "plane_size_mm": [
+    340.0,
+    210.0
+  ],
+  "photo_size_px": [
+    2400,
+    1600
+  ],
+  "ground_truth_polygon_plane_mm": [
+    [
+      205.0,
+      55.0
+    ],
+    [
+      290.0,
+      59.0
+    ],
+    [
+      310.0,
+      89.0
+    ],
+    [
+      301.0,
+      133.0
+    ],
+    [
+      260.0,
+      147.0
+    ],
+    [
+      225.0,
+      127.0
+    ],
+    [
+      210.0,
+      93.0
+    ]
+  ],
+  "ground_truth_polygon_board_mm": [
+    [
+      187.0,
+      20.0
+    ],
+    [
+      272.0,
+      24.0
+    ],
+    [
+      292.0,
+      54.0
+    ],
+    [
+      283.0,
+      98.0
+    ],
+    [
+      242.0,
+      112.0
+    ],
+    [
+      207.0,
+      92.0
+    ],
+    [
+      192.0,
+      58.0
+    ]
+  ],
+  "image": "light_on_dark.png"
+}

@@ -1,0 +1,80 @@
+{
+  "scene": "dark_on_light",
+  "description": "Dark canvas piece on light paper mat; near fronto-parallel.",
+  "board_origin_plane_mm": [
+    20.0,
+    35.0
+  ],
+  "board_angle_deg": 0.0,
+  "board_width_mm": 165.0,
+  "board_height_mm": 120.0,
+  "plane_size_mm": [
+    340.0,
+    210.0
+  ],
+  "photo_size_px": [
+    2400,
+    1600
+  ],
+  "ground_truth_polygon_plane_mm": [
+    [
+      210.0,
+      55.0
+    ],
+    [
+      295.0,
+      59.0
+    ],
+    [
+      315.0,
+      89.0
+    ],
+    [
+      306.0,
+      133.0
+    ],
+    [
+      265.0,
+      147.0
+    ],
+    [
+      230.0,
+      127.0
+    ],
+    [
+      215.0,
+      93.0
+    ]
+  ],
+  "ground_truth_polygon_board_mm": [
+    [
+      190.0,
+      20.0
+    ],
+    [
+      275.0,
+      24.0
+    ],
+    [
+      295.0,
+      54.0
+    ],
+    [
+      286.0,
+      98.0
+    ],
+    [
+      245.0,
+      112.0
+    ],
+    [
+      210.0,
+      92.0
+    ],
+    [
+      195.0,
+      58.0
+    ]
+  ],
+  "image": "dark_on_light.png"
+}

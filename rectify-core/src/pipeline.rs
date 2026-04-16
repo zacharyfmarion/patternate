@@ -7,13 +7,20 @@ use anyhow::{Context, Result};
 
 use crate::{
     board_detect::detect_board,
-    board_spec::{BoardSpecSource, load_board_spec},
-    homography::{Homography, compute_rectified_bounds},
+    board_spec::{BoardSpec, BoardSpecSource, load_board_spec},
+    contour::{MmPolygon, pixels_to_mm, trace_outer_contour_px},
+    homography::{Homography, RectifiedBounds, compute_rectified_bounds},
     image_io::load_image,
-    metadata::{ImageMetadata, ReferenceBoardMetadata, ScaleMetadata, TransformMetadata},
+    metadata::{
+        ImageMetadata, OutlineMetadata, ReferenceBoardMetadata, ScaleMetadata, TransformMetadata,
+    },
     quality::{QualityReport, assess_quality},
-    warp::warp_image,
+    segment::{SegmentationOptions, SegmentationStats, segment_piece_with_validity},
+    simplify::simplify_polygon,
+    vector_export::{write_dxf, write_outline_json, write_svg},
+    warp::warp_image_with_validity,
 };
+use image::{GrayImage, RgbImage};
 
 // ---------------------------------------------------------------------------
 // Shared request / result types
@@ -36,12 +43,66 @@ pub struct BoardDetectionRunResult {
 }
 
 #[derive(Debug, Clone)]
+pub struct OutlineOptions {
+    /// Enable outline extraction / SVG / DXF export.
+    pub extract: bool,
+    /// Ramer–Douglas–Peucker tolerance in mm.
+    pub simplify_mm: f64,
+    /// Minimum accepted candidate area, in mm². Anything smaller is
+    /// rejected as noise.
+    pub min_piece_area_mm2: f64,
+    /// Additional mm margin around the known board rectangle to exclude
+    /// from segmentation candidates.
+    pub board_margin_mm: Option<f64>,
+    /// Reserved for future curve fitting. Currently no-op.
+    pub smooth: bool,
+}
+
+impl Default for OutlineOptions {
+    fn default() -> Self {
+        Self {
+            extract: true,
+            simplify_mm: 0.3,
+            min_piece_area_mm2: 200.0,
+            board_margin_mm: None,
+            smooth: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RectifyRequest {
     pub input_path: PathBuf,
     pub board_spec_source: BoardSpecSource,
     pub output_dir: PathBuf,
     /// Target output scale.  Defaults to 10 px/mm if not set.
     pub pixels_per_mm: Option<f64>,
+    pub outline: OutlineOptions,
+}
+
+impl RectifyRequest {
+    pub fn new(
+        input_path: PathBuf,
+        board_spec_source: BoardSpecSource,
+        output_dir: PathBuf,
+    ) -> Self {
+        Self {
+            input_path,
+            board_spec_source,
+            output_dir,
+            pixels_per_mm: None,
+            outline: OutlineOptions::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OutlineOutput {
+    pub svg_path: PathBuf,
+    pub dxf_path: PathBuf,
+    pub json_path: PathBuf,
+    pub mask_debug_path: PathBuf,
+    pub metadata: OutlineMetadata,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +116,7 @@ pub struct RectifyRunResult {
     pub board_spec_path: PathBuf,
     pub pixels_per_mm: f64,
     pub quality: QualityReport,
+    pub outline: Option<OutlineOutput>,
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +182,7 @@ pub fn run_board_detection_checkpoint(
         scale: None,
         homography_board_mm_to_image: None,
         homography_image_to_board_mm: None,
+        outline: None,
     };
 
     let transform_path = request.output_dir.join("transform.json");
@@ -205,16 +268,38 @@ pub fn run_rectify(request: &RectifyRequest) -> Result<RectifyRunResult> {
     );
 
     // --- Stage F: warp ---
-    let rectified = warp_image(&loaded.image, &h_board_to_image, &bounds, pixels_per_mm);
+    let (rectified, validity) =
+        warp_image_with_validity(&loaded.image, &h_board_to_image, &bounds, pixels_per_mm);
     let rectified_path = request.output_dir.join("rectified.png");
     rectified
         .save(&rectified_path)
         .with_context(|| format!("failed to save {}", rectified_path.display()))?;
 
-    // --- Emit transform.json ---
     let (out_w, out_h) = bounds.output_size_px(pixels_per_mm);
     let mm_per_pixel = 1.0 / pixels_per_mm;
 
+    // --- Stage G: outline extraction (optional) ---
+    let outline_output = if request.outline.extract {
+        match extract_outline(
+            &rectified,
+            Some(&validity),
+            &bounds,
+            pixels_per_mm,
+            &board_spec,
+            &request.outline,
+            &request.output_dir,
+        ) {
+            Ok(output) => Some(output),
+            Err(e) => {
+                eprintln!("outline extraction failed: {e:#}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // --- Emit transform.json ---
     let transform = TransformMetadata {
         schema_version: 1,
         phase: "rectify",
@@ -244,6 +329,7 @@ pub fn run_rectify(request: &RectifyRequest) -> Result<RectifyRunResult> {
         }),
         homography_board_mm_to_image: Some(*h_board_to_image.rows()),
         homography_image_to_board_mm: Some(*h_image_to_board.rows()),
+        outline: outline_output.as_ref().map(|o| o.metadata.clone()),
     };
 
     let transform_path = request.output_dir.join("transform.json");
@@ -259,6 +345,136 @@ pub fn run_rectify(request: &RectifyRequest) -> Result<RectifyRunResult> {
         board_spec_path,
         pixels_per_mm,
         quality,
+        outline: outline_output,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Outline extraction
+// ---------------------------------------------------------------------------
+
+fn extract_outline(
+    rectified: &RgbImage,
+    validity: Option<&GrayImage>,
+    bounds: &RectifiedBounds,
+    pixels_per_mm: f64,
+    board_spec: &BoardSpec,
+    opts: &OutlineOptions,
+    output_dir: &Path,
+) -> Result<OutlineOutput> {
+    let board_margin_mm = opts.board_margin_mm.unwrap_or(board_spec.quiet_zone_mm);
+
+    let seg_opts = SegmentationOptions::default_for_scale(
+        pixels_per_mm,
+        *bounds,
+        board_spec.board_width_mm(),
+        board_spec.board_height_mm(),
+        board_margin_mm,
+        opts.min_piece_area_mm2,
+    );
+
+    let seg = segment_piece_with_validity(rectified, validity, &seg_opts)?;
+
+    // Debug outputs so users (and tests) can inspect segmentation quality.
+    let mask_debug_path = output_dir.join("piece_mask.png");
+    seg.mask
+        .save(&mask_debug_path)
+        .with_context(|| format!("failed to save {}", mask_debug_path.display()))?;
+    let exclusion_debug_path = output_dir.join("board_exclusion.png");
+    let _ = seg.board_exclusion.save(&exclusion_debug_path);
+
+    let pixel_contour = trace_outer_contour_px(&seg.mask)?;
+    let raw_polygon = pixels_to_mm(&pixel_contour, bounds, pixels_per_mm);
+    let raw_vertex_count = raw_polygon.len();
+
+    let simplified = simplify_polygon(&raw_polygon, opts.simplify_mm);
+    let polygon: MmPolygon = if opts.smooth {
+        // Placeholder for future cubic-Bezier fit; keep identity for now so
+        // downstream output is deterministic.
+        simplified
+    } else {
+        simplified
+    };
+
+    let bbox = polygon
+        .bbox()
+        .context("simplified polygon has no vertices")?;
+    let area_mm2 = polygon.area_abs();
+    let perimeter_mm = polygon.perimeter();
+
+    let svg_path = output_dir.join("outline.svg");
+    write_svg(&svg_path, &polygon, bbox)?;
+
+    let dxf_path = output_dir.join("outline.dxf");
+    write_dxf(&dxf_path, &polygon, bbox)?;
+
+    let outline_json = build_outline_json_payload(
+        &polygon,
+        bbox,
+        area_mm2,
+        perimeter_mm,
+        raw_vertex_count,
+        opts.simplify_mm,
+        seg.stats,
+    );
+    let json_path = output_dir.join("outline.json");
+    write_outline_json(&json_path, &outline_json)?;
+
+    Ok(OutlineOutput {
+        svg_path,
+        dxf_path,
+        json_path,
+        mask_debug_path,
+        metadata: OutlineMetadata {
+            vertex_count_raw: raw_vertex_count,
+            vertex_count_simplified: polygon.len(),
+            simplify_tolerance_mm: opts.simplify_mm,
+            bounding_box_mm: bbox,
+            area_mm2,
+            perimeter_mm,
+            segmentation: seg.stats,
+        },
+    })
+}
+
+fn build_outline_json_payload(
+    polygon: &MmPolygon,
+    bbox: [f64; 4],
+    area_mm2: f64,
+    perimeter_mm: f64,
+    raw_vertex_count: usize,
+    simplify_mm: f64,
+    segmentation: SegmentationStats,
+) -> serde_json::Value {
+    let points: Vec<serde_json::Value> = polygon
+        .points
+        .iter()
+        .map(|p| serde_json::json!([p[0], p[1]]))
+        .collect();
+
+    serde_json::json!({
+        "schema_version": 1,
+        "units": "millimeters",
+        "closed": true,
+        "vertex_count_raw": raw_vertex_count,
+        "vertex_count": polygon.len(),
+        "simplify_tolerance_mm": simplify_mm,
+        "bounding_box_mm": {
+            "min_x": bbox[0],
+            "min_y": bbox[1],
+            "max_x": bbox[2],
+            "max_y": bbox[3],
+        },
+        "area_mm2": area_mm2,
+        "perimeter_mm": perimeter_mm,
+        "polygon_mm": points,
+        "segmentation": {
+            "background_rgb": segmentation.background_rgb,
+            "otsu_threshold": segmentation.otsu_threshold,
+            "component_count": segmentation.component_count,
+            "piece_area_mm2": segmentation.piece_area_mm2,
+            "piece_pixel_count": segmentation.piece_pixel_count,
+        },
     })
 }
 
@@ -362,6 +578,10 @@ mod tests {
             board_spec_source: BoardSpecSource::BuiltIn("refboard_v1".to_string()),
             output_dir: output_dir.clone(),
             pixels_per_mm: Some(5.0),
+            outline: OutlineOptions {
+                extract: false,
+                ..OutlineOptions::default()
+            },
         })
         .unwrap();
 
@@ -414,6 +634,10 @@ mod tests {
             board_spec_source: BoardSpecSource::BuiltIn("refboard_v1".to_string()),
             output_dir: tmp5.join("out"),
             pixels_per_mm: Some(5.0),
+            outline: OutlineOptions {
+                extract: false,
+                ..OutlineOptions::default()
+            },
         })
         .unwrap();
 
@@ -424,6 +648,10 @@ mod tests {
             board_spec_source: BoardSpecSource::BuiltIn("refboard_v1".to_string()),
             output_dir: tmp10.join("out"),
             pixels_per_mm: Some(10.0),
+            outline: OutlineOptions {
+                extract: false,
+                ..OutlineOptions::default()
+            },
         })
         .unwrap();
 
