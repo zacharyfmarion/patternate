@@ -853,6 +853,8 @@ textarea {
   display: grid;
   grid-template-columns: 168px minmax(0, 1fr);
   overflow: hidden;
+  /* Avoid scroll chaining / rubber-band on the shell so the inner body owns vertical scroll. */
+  overscroll-behavior: contain;
 }
 
 .pd-settings-dialog-content:focus {
@@ -917,16 +919,22 @@ textarea {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pd-settings-dialog-header {
-  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -964,18 +972,11 @@ textarea {
 }
 
 .pd-settings-dialog-body {
-  flex: 1 1 auto;
   min-width: 0;
-  min-height: 0;
-  height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   padding: var(--space-4) var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-section-gap);
-  -webkit-overflow-scrolling: touch;
 }
 
 .pd-settings-dialog-actions {
