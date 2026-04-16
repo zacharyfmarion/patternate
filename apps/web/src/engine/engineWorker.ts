@@ -13,6 +13,8 @@ import initWasm, {
 
 import type {
   DetectBoardResult,
+  RectifyProgressEvent,
+  RectifyProgressHandler,
   RectifyOptions,
   RectifyResult,
 } from './types';
@@ -56,6 +58,7 @@ const api = {
     bytes: Uint8Array,
     options: RectifyOptions,
     boardId?: string,
+    onProgress?: RectifyProgressHandler,
   ): Promise<RectifyResult> {
     await ensureInit();
     const raw = wasmRectify(
@@ -63,6 +66,11 @@ const api = {
       JSON.stringify(options),
       boardId ?? 'refboard_v1',
       undefined,
+      onProgress
+        ? ((event: unknown) => {
+            void onProgress(event as RectifyProgressEvent);
+          })
+        : undefined,
     ) as Record<string, unknown>;
     const outline = raw.outline as Record<string, unknown> | null | undefined;
     return {

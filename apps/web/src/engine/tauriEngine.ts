@@ -8,7 +8,7 @@
  */
 
 import { WorkerEngine } from './workerEngine';
-import type { EngineBridge, RectifyOptions } from './types';
+import type { EngineBridge, RectifyOptions, RectifyProgressHandler } from './types';
 
 export class TauriEngine implements EngineBridge {
   private worker: WorkerEngine;
@@ -25,8 +25,13 @@ export class TauriEngine implements EngineBridge {
     return this.worker.detectBoard(bytes, boardId);
   }
 
-  rectify(bytes: Uint8Array, options: RectifyOptions, boardId?: string) {
-    return this.worker.rectify(bytes, options, boardId);
+  rectify(
+    bytes: Uint8Array,
+    options: RectifyOptions,
+    boardId?: string,
+    onProgress?: RectifyProgressHandler,
+  ) {
+    return this.worker.rectify(bytes, options, boardId, onProgress);
   }
 
   builtinBoardSpec(boardId: string) {

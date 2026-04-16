@@ -82,28 +82,30 @@ export function App() {
       <header className="pd-topbar">
         <h1>Pattern Detector</h1>
         <span className="pd-spacer" />
-        <button onClick={toggleLog} title="Toggle log (Cmd+`)">
-          <Terminal size={14} /> Log
-        </button>
-        <button onClick={openShortcuts} title="Shortcuts (Cmd+/)">
-          <Keyboard size={14} />
-        </button>
-        <button onClick={openAbout} title="About">
-          <Info size={14} />
-        </button>
-        <button onClick={openSettings} title="Settings (Cmd+,)">
-          <SettingsIcon size={14} />
-        </button>
-        <button
-          onClick={toggleLightDark}
-          title={
-            currentTheme.type === 'dark'
-              ? 'Switch to light theme (open Settings for more)'
-              : 'Switch to dark theme (open Settings for more)'
-          }
-        >
-          {currentTheme.type === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
+        <div className="pd-topbar-actions" role="toolbar" aria-label="App actions">
+          <button onClick={toggleLog} title="Toggle log (Cmd+`)">
+            <Terminal size={14} /> Log
+          </button>
+          <button onClick={openShortcuts} title="Shortcuts (Cmd+/)">
+            <Keyboard size={14} />
+          </button>
+          <button onClick={openAbout} title="About">
+            <Info size={14} />
+          </button>
+          <button onClick={openSettings} title="Settings (Cmd+,)">
+            <SettingsIcon size={14} />
+          </button>
+          <button
+            onClick={toggleLightDark}
+            title={
+              currentTheme.type === 'dark'
+                ? 'Switch to light theme (open Settings for more)'
+                : 'Switch to dark theme (open Settings for more)'
+            }
+          >
+            {currentTheme.type === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+        </div>
       </header>
 
       <div className="pd-dockview-wrap">

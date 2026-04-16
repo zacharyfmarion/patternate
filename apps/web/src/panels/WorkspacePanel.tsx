@@ -113,7 +113,6 @@ export function WorkspacePanel() {
   const runError = usePipelineStore((s) => s.runError);
   const result = usePipelineStore((s) => s.result);
   const setInput = usePipelineStore((s) => s.setInput);
-  const clearInput = usePipelineStore((s) => s.clearInput);
   const run = usePipelineStore((s) => s.run);
   const pushToast = usePipelineStore((s) => s.pushToast);
   const showOverlays = useSettingsStore((s) => s.settings.showOverlays);
@@ -125,6 +124,56 @@ export function WorkspacePanel() {
 
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const outlineMeta = result?.outline?.metadata ?? null;
+  const fileStem = fileName?.replace(/\.[^.]+$/, '') ?? '';
+
+  const workspaceState = useMemo(() => {
+    if (editMode) {
+      return {
+        tone: 'editing',
+        label: 'Editing',
+        summary: 'Curve editor is active. Refine the outline directly on the image.',
+      };
+    }
+
+    if (runStatus === 'running') {
+      return {
+        tone: 'running',
+        label: 'Processing',
+        summary: 'Rectifying the image and extracting an outline.',
+      };
+    }
+
+    if (runStatus === 'error') {
+      return {
+        tone: 'error',
+        label: 'Needs Attention',
+        summary: runError ?? 'The pipeline could not extract a reliable outline.',
+      };
+    }
+
+    if (runStatus === 'success' && outlineMeta) {
+      return {
+        tone: 'success',
+        label: 'Outline Ready',
+        summary: `${outlineMeta.area_mm2.toFixed(0)} mm² area · ${outlineMeta.vertex_count_simplified} vertices`,
+      };
+    }
+
+    if (runStatus === 'success') {
+      return {
+        tone: 'ready',
+        label: 'Rectified',
+        summary: 'Rectification completed. No outline was extracted from this pass.',
+      };
+    }
+
+    return {
+      tone: 'ready',
+      label: 'Ready',
+      summary: 'Choose when to run the pipeline. Results will appear in the viewport below.',
+    };
+  }, [editMode, outlineMeta, runError, runStatus]);
 
   async function handleFile(file: File) {
     try {
@@ -209,21 +258,40 @@ export function WorkspacePanel() {
   // ---------- STATE: file loaded (running / success / error) ----------
   return (
     <div className="pd-panel">
-      <div className="pd-row-between">
-        <div className="pd-row" style={{ gap: 10 }}>
-          <strong style={{ fontSize: 13 }}>{fileName}</strong>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleFile(f);
+          e.currentTarget.value = '';
+        }}
+      />
+
+      <section className="pd-workspace-header">
+        <div className="pd-workspace-header-copy">
+          <div className="pd-workspace-eyebrow">Current image</div>
+          <div className="pd-workspace-title-row">
+            <h2 className="pd-workspace-title" title={fileName}>
+              {fileStem}
+            </h2>
+            <span className={`pd-status-pill pd-status-pill-${workspaceState.tone}`}>
+              {workspaceState.label}
+            </span>
+          </div>
+          <p className="pd-workspace-summary">{workspaceState.summary}</p>
           <button
-            className="pd-btn pd-btn-ghost"
-            onClick={() => {
-              clearInput();
-              pushToast('info', 'Cleared');
-            }}
-            title="Load a different image"
+            className="pd-workspace-link"
+            onClick={() => fileInputRef.current?.click()}
+            title="Replace the current image"
           >
-            Change image
+            <Upload size={14} /> Replace image
           </button>
         </div>
-        <div className="pd-row" style={{ gap: 6 }}>
+
+        <div className="pd-workspace-header-actions">
           {runStatus === 'success' && result?.outline && !editMode ? (
             <button
               className="pd-btn"
@@ -252,11 +320,11 @@ export function WorkspacePanel() {
                 ? 'Running…'
                 : runStatus === 'idle'
                   ? 'Run'
-                  : 'Re-run'}
+                : 'Re-run'}
             </span>
           </button>
         </div>
-      </div>
+      </section>
 
       {runStatus === 'error' ? (
         <ValidationBanner
@@ -363,7 +431,6 @@ function Viewport({
           key={baseUrl}
           url={baseUrl}
           detection={showOverlays && result?.detection ? result.detection : null}
-          running={runStatus === 'running'}
         />
       ) : null}
     </div>
@@ -373,11 +440,9 @@ function Viewport({
 function InputWithDetection({
   url,
   detection,
-  running,
 }: {
   url: string;
   detection: BoardDetectionDebug | null;
-  running: boolean;
 }) {
   const imgRef = useRef<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -403,12 +468,6 @@ function InputWithDetection({
     <div className="pd-overlay-stack">
       <img ref={imgRef} src={url} alt="input" />
       <canvas ref={canvasRef} />
-      {running ? (
-        <div className="pd-viewport-overlay">
-          <div className="pd-spinner" />
-          <div>Running pipeline…</div>
-        </div>
-      ) : null}
     </div>
   );
 }

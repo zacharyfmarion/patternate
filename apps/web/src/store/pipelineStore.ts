@@ -1,7 +1,12 @@
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import type { RectifyResult } from '../engine/types';
+import type {
+  RectifyProgressEvent,
+  RectifyProgressStatus,
+  RectifyProgressStep,
+  RectifyResult,
+} from '../engine/types';
 import { getEngine } from '../engine';
 import { useSettingsStore } from './settingsStore';
 import { useEditStore } from './editStore';
@@ -19,6 +24,15 @@ export interface Toast {
   level: ToastLevel;
   message: string;
   timestamp: number;
+}
+
+export type RunProgressItemStatus = RectifyProgressStatus | 'pending';
+
+export interface RunProgressItem {
+  step: RectifyProgressStep;
+  label: string;
+  status: RunProgressItemStatus;
+  message: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,6 +54,7 @@ interface RunSlice {
   preparedUrl: string | null;
   rectifiedUrl: string | null;
   maskUrl: string | null;
+  runProgress: RunProgressItem[];
   run: () => Promise<void>;
   rerunOutline: () => Promise<void>;
 }
@@ -51,6 +66,22 @@ interface ToastSlice {
 }
 
 type PipelineState = InputSlice & RunSlice & ToastSlice;
+
+const RUN_PROGRESS_ORDER: RectifyProgressStep[] = [
+  'prepare_input',
+  'detect_board',
+  'assess_quality',
+  'rectify_image',
+  'extract_outline',
+];
+
+const RUN_PROGRESS_LABELS: Record<RectifyProgressStep, string> = {
+  prepare_input: 'Prepare input image',
+  detect_board: 'Detect reference board',
+  assess_quality: 'Check image quality',
+  rectify_image: 'Rectify board plane',
+  extract_outline: 'Extract pattern outline',
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,6 +109,30 @@ function imageBlobUrl(bytes: Uint8Array, fileName: string): string {
   return URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
 }
 
+function createRunProgress(): RunProgressItem[] {
+  return RUN_PROGRESS_ORDER.map((step) => ({
+    step,
+    label: RUN_PROGRESS_LABELS[step],
+    status: 'pending',
+    message: '',
+  }));
+}
+
+function applyProgressEvent(
+  progress: RunProgressItem[],
+  event: RectifyProgressEvent,
+): RunProgressItem[] {
+  return progress.map((item) =>
+    item.step === event.step
+      ? {
+          ...item,
+          status: event.status,
+          message: event.message,
+        }
+      : item,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Slice creators
 // ---------------------------------------------------------------------------
@@ -103,6 +158,7 @@ const createInputSlice: StateCreator<PipelineState, [], [], InputSlice> = (set, 
       preparedUrl: null,
       rectifiedUrl: null,
       maskUrl: null,
+      runProgress: [],
     });
   },
   clearInput() {
@@ -121,6 +177,7 @@ const createInputSlice: StateCreator<PipelineState, [], [], InputSlice> = (set, 
       preparedUrl: null,
       rectifiedUrl: null,
       maskUrl: null,
+      runProgress: [],
     });
   },
 });
@@ -132,6 +189,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
   preparedUrl: null,
   rectifiedUrl: null,
   maskUrl: null,
+  runProgress: [],
   async run() {
     const { fileBytes } = get();
     if (!fileBytes) {
@@ -149,6 +207,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       preparedUrl: null,
       rectifiedUrl: null,
       maskUrl: null,
+      runProgress: createRunProgress(),
     });
     try {
       const engine = await getEngine();
@@ -166,6 +225,13 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
           },
         },
         settings.boardSpec,
+        (event) =>
+          set((state) => ({
+            runProgress: applyProgressEvent(
+              state.runProgress.length > 0 ? state.runProgress : createRunProgress(),
+              event,
+            ),
+          })),
       );
 
       const preparedUrl = pngBlobUrl(result.preparedPng);

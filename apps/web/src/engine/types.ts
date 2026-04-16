@@ -125,6 +125,23 @@ export interface RectifyOptions {
   outline: OutlineOptions;
 }
 
+export type RectifyProgressStep =
+  | 'prepare_input'
+  | 'detect_board'
+  | 'assess_quality'
+  | 'rectify_image'
+  | 'extract_outline';
+
+export type RectifyProgressStatus = 'running' | 'completed' | 'skipped' | 'failed';
+
+export interface RectifyProgressEvent {
+  step: RectifyProgressStep;
+  status: RectifyProgressStatus;
+  message: string;
+}
+
+export type RectifyProgressHandler = (event: RectifyProgressEvent) => void;
+
 // ---------------------------------------------------------------------------
 // Engine results (shape returned by rectify-wasm)
 // ---------------------------------------------------------------------------
@@ -170,6 +187,7 @@ export interface EngineBridge {
     bytes: Uint8Array,
     options: RectifyOptions,
     boardId?: string,
+    onProgress?: RectifyProgressHandler,
   ): Promise<RectifyResult>;
   builtinBoardSpec(boardId: string): Promise<string>;
 }

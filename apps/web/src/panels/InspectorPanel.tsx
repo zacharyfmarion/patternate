@@ -4,6 +4,7 @@ import { Download } from 'lucide-react';
 import { usePipelineStore } from '../store/pipelineStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useEditStore } from '../store/editStore';
+import { RunProgress } from '../components/RunProgress';
 import type { RectifyResult } from '../engine/types';
 import {
   computeExportBbox,
@@ -60,6 +61,7 @@ function Section({
 export function InspectorPanel() {
   const runStatus = usePipelineStore((s) => s.runStatus);
   const runError = usePipelineStore((s) => s.runError);
+  const runProgress = usePipelineStore((s) => s.runProgress);
   const result = usePipelineStore((s) => s.result);
   const fileName = usePipelineStore((s) => s.fileName);
   const previewUrl = usePipelineStore((s) => s.previewUrl);
@@ -99,10 +101,7 @@ export function InspectorPanel() {
     return (
       <div className="pd-inspector">
         <Section title="Running">
-          <div className="pd-row" style={{ gap: 8 }}>
-            <div className="pd-spinner pd-spinner-sm" />
-            <span>Detecting board & extracting outline…</span>
-          </div>
+          <RunProgress items={runProgress} />
         </Section>
       </div>
     );

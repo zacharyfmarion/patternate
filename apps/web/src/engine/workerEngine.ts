@@ -3,6 +3,7 @@ import * as Comlink from 'comlink';
 import type {
   DetectBoardResult,
   EngineBridge,
+  RectifyProgressHandler,
   RectifyOptions,
   RectifyResult,
 } from './types';
@@ -35,9 +36,15 @@ export class WorkerEngine implements EngineBridge {
     bytes: Uint8Array,
     options: RectifyOptions,
     boardId?: string,
+    onProgress?: RectifyProgressHandler,
   ): Promise<RectifyResult> {
     await this.ready;
-    return this.api.rectify(bytes, options, boardId);
+    return this.api.rectify(
+      bytes,
+      options,
+      boardId,
+      onProgress ? Comlink.proxy(onProgress) : undefined,
+    );
   }
 
   async builtinBoardSpec(boardId: string): Promise<string> {

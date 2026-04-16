@@ -35,7 +35,8 @@ pub use metadata::{
 };
 pub use pipeline::{
     DetectBoardOutcome, OutlineBundle, OutlineOptions, RectifyOptions, RectifyOutcome,
-    detect_board_in_memory, rectify_in_memory,
+    RectifyProgressEvent, RectifyProgressStatus, RectifyProgressStep, detect_board_in_memory,
+    rectify_in_memory, rectify_in_memory_with_progress,
 };
 
 #[cfg(not(target_family = "wasm"))]

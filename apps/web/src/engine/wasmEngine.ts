@@ -13,6 +13,8 @@ import initWasm, {
 import type {
   DetectBoardResult,
   EngineBridge,
+  RectifyProgressEvent,
+  RectifyProgressHandler,
   RectifyOptions,
   RectifyResult,
 } from './types';
@@ -38,13 +40,23 @@ export const wasmEngine: EngineBridge = {
     };
   },
 
-  async rectify(bytes, options: RectifyOptions, boardId = 'refboard_v1') {
+  async rectify(
+    bytes,
+    options: RectifyOptions,
+    boardId = 'refboard_v1',
+    onProgress?: RectifyProgressHandler,
+  ) {
     await ensureInit();
     const raw = wasmRectify(
       bytes,
       JSON.stringify(options),
       boardId,
       undefined,
+      onProgress
+        ? ((event: unknown) => {
+            onProgress(event as RectifyProgressEvent);
+          })
+        : undefined,
     ) as Record<string, unknown>;
     const outline = raw.outline as Record<string, unknown> | null | undefined;
     return {

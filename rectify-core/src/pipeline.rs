@@ -75,6 +75,32 @@ impl Default for RectifyOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RectifyProgressStep {
+    PrepareInput,
+    DetectBoard,
+    AssessQuality,
+    RectifyImage,
+    ExtractOutline,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RectifyProgressStatus {
+    Running,
+    Completed,
+    Skipped,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RectifyProgressEvent {
+    pub step: RectifyProgressStep,
+    pub status: RectifyProgressStatus,
+    pub message: String,
+}
+
 // ---------------------------------------------------------------------------
 // In-memory result types (no filesystem paths). These are what WASM exports.
 // ---------------------------------------------------------------------------
@@ -164,14 +190,82 @@ pub fn rectify_in_memory(
     board_spec: &BoardSpec,
     options: &RectifyOptions,
 ) -> Result<RectifyOutcome> {
+    rectify_in_memory_with_progress(image_bytes, board_spec, options, |_| {})
+}
+
+pub fn rectify_in_memory_with_progress<F>(
+    image_bytes: &[u8],
+    board_spec: &BoardSpec,
+    options: &RectifyOptions,
+    mut on_progress: F,
+) -> Result<RectifyOutcome>
+where
+    F: FnMut(RectifyProgressEvent),
+{
+    progress(
+        &mut on_progress,
+        RectifyProgressStep::PrepareInput,
+        RectifyProgressStatus::Running,
+        "Preparing input image",
+    );
     let loaded = load_image_from_bytes(image_bytes)?;
     let prepared_png = encode_png(&loaded.image)?;
-    let detection = detect_board(&to_gray(&loaded.image), board_spec)?.debug;
+    progress(
+        &mut on_progress,
+        RectifyProgressStep::PrepareInput,
+        RectifyProgressStatus::Completed,
+        "Prepared input image",
+    );
 
+    progress(
+        &mut on_progress,
+        RectifyProgressStep::DetectBoard,
+        RectifyProgressStatus::Running,
+        "Detecting reference board",
+    );
+    let detection = detect_board(&to_gray(&loaded.image), board_spec)?.debug;
+    progress(
+        &mut on_progress,
+        RectifyProgressStep::DetectBoard,
+        RectifyProgressStatus::Completed,
+        format!(
+            "Detected {} markers and {} ChArUco corners",
+            detection.summary.marker_count, detection.summary.charuco_corner_count
+        ),
+    );
+
+    progress(
+        &mut on_progress,
+        RectifyProgressStep::AssessQuality,
+        RectifyProgressStatus::Running,
+        "Checking image quality",
+    );
     let quality =
         assess_quality(&loaded.image, &detection.summary).unwrap_or_else(|report| report.clone());
 
     if quality.status == QualityStatus::Fail {
+        progress(
+            &mut on_progress,
+            RectifyProgressStep::AssessQuality,
+            RectifyProgressStatus::Failed,
+            if quality.warnings.is_empty() {
+                "Quality gate failed".to_string()
+            } else {
+                format!("Quality gate failed: {}", quality.warnings.join("; "))
+            },
+        );
+        progress(
+            &mut on_progress,
+            RectifyProgressStep::RectifyImage,
+            RectifyProgressStatus::Skipped,
+            "Skipped because quality checks failed",
+        );
+        progress(
+            &mut on_progress,
+            RectifyProgressStep::ExtractOutline,
+            RectifyProgressStatus::Skipped,
+            "Skipped because rectification did not run",
+        );
         let metadata = build_metadata_board_only(&loaded, board_spec, &detection);
         return Ok(RectifyOutcome {
             detection,
@@ -184,7 +278,23 @@ pub fn rectify_in_memory(
             quality_failed: true,
         });
     }
+    progress(
+        &mut on_progress,
+        RectifyProgressStep::AssessQuality,
+        RectifyProgressStatus::Completed,
+        if quality.warnings.is_empty() {
+            "Image quality checks passed".to_string()
+        } else {
+            format!("Quality checks passed with warnings: {}", quality.warnings.join("; "))
+        },
+    );
 
+    progress(
+        &mut on_progress,
+        RectifyProgressStep::RectifyImage,
+        RectifyProgressStatus::Running,
+        "Rectifying image to board plane",
+    );
     let h_board_to_image = Homography::from_rows(detection.homography_board_mm_to_image);
     let h_image_to_board = h_board_to_image
         .inverse()
@@ -200,11 +310,26 @@ pub fn rectify_in_memory(
     let (rectified, validity) =
         warp_image_with_validity(&loaded.image, &h_board_to_image, &bounds, pixels_per_mm);
     let rectified_png = encode_png(&rectified)?;
+    progress(
+        &mut on_progress,
+        RectifyProgressStep::RectifyImage,
+        RectifyProgressStatus::Completed,
+        format!(
+            "Created rectified image at {:.1} px/mm",
+            pixels_per_mm
+        ),
+    );
 
     let (out_w, out_h) = bounds.output_size_px(pixels_per_mm);
     let mm_per_pixel = 1.0 / pixels_per_mm;
 
     let outline_bundle = if options.outline.extract {
+        progress(
+            &mut on_progress,
+            RectifyProgressStep::ExtractOutline,
+            RectifyProgressStatus::Running,
+            "Extracting pattern outline",
+        );
         match extract_outline_in_memory(
             &rectified,
             Some(&validity),
@@ -213,10 +338,35 @@ pub fn rectify_in_memory(
             board_spec,
             &options.outline,
         ) {
-            Ok(bundle) => Some(bundle),
-            Err(_) => None,
+            Ok(bundle) => {
+                progress(
+                    &mut on_progress,
+                    RectifyProgressStep::ExtractOutline,
+                    RectifyProgressStatus::Completed,
+                    format!(
+                        "Extracted outline with {} vertices",
+                        bundle.metadata.vertex_count_simplified
+                    ),
+                );
+                Some(bundle)
+            }
+            Err(err) => {
+                progress(
+                    &mut on_progress,
+                    RectifyProgressStep::ExtractOutline,
+                    RectifyProgressStatus::Failed,
+                    format!("Outline extraction failed: {err}"),
+                );
+                None
+            }
         }
     } else {
+        progress(
+            &mut on_progress,
+            RectifyProgressStep::ExtractOutline,
+            RectifyProgressStatus::Skipped,
+            "Outline extraction is disabled",
+        );
         None
     };
 
@@ -268,6 +418,21 @@ pub fn rectify_in_memory(
         outline: outline_bundle,
         quality_failed: false,
     })
+}
+
+fn progress<F>(
+    on_progress: &mut F,
+    step: RectifyProgressStep,
+    status: RectifyProgressStatus,
+    message: impl Into<String>,
+) where
+    F: FnMut(RectifyProgressEvent),
+{
+    on_progress(RectifyProgressEvent {
+        step,
+        status,
+        message: message.into(),
+    });
 }
 
 // ---------------------------------------------------------------------------
