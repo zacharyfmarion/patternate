@@ -1,48 +1,36 @@
+#[cfg(not(target_family = "wasm"))]
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 
+#[cfg(not(target_family = "wasm"))]
+use crate::board_spec::{BoardSpecSource, load_board_spec};
 use crate::{
-    board_detect::detect_board,
-    board_spec::{BoardSpec, BoardSpecSource, load_board_spec},
+    board_detect::{BoardDetectionDebug, detect_board},
+    board_spec::BoardSpec,
     contour::{MmPolygon, pixels_to_mm, trace_outer_contour_px},
     homography::{Homography, RectifiedBounds, compute_rectified_bounds},
-    image_io::load_image,
+    image_io::{LoadedImage, load_image_from_bytes},
     metadata::{
         ImageMetadata, OutlineMetadata, ReferenceBoardMetadata, ScaleMetadata, TransformMetadata,
     },
-    quality::{QualityReport, assess_quality},
+    quality::{QualityReport, QualityStatus, assess_quality},
     segment::{SegmentationOptions, SegmentationStats, segment_piece_with_validity},
     simplify::simplify_polygon,
-    vector_export::{write_dxf, write_outline_json, write_svg},
+    vector_export::{render_dxf, render_svg},
     warp::warp_image_with_validity,
 };
-use image::{GrayImage, RgbImage};
+use image::{GrayImage, ImageFormat, RgbImage};
 
 // ---------------------------------------------------------------------------
-// Shared request / result types
+// Shared option / result types
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
-pub struct BoardDetectionRequest {
-    pub input_path: PathBuf,
-    pub board_spec_source: BoardSpecSource,
-    pub output_dir: PathBuf,
-}
-
-#[derive(Debug, Clone)]
-pub struct BoardDetectionRunResult {
-    pub prepared_input_path: PathBuf,
-    pub debug_overlay_path: PathBuf,
-    pub board_debug_path: PathBuf,
-    pub transform_path: PathBuf,
-    pub board_spec_path: PathBuf,
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutlineOptions {
     /// Enable outline extraction / SVG / DXF export.
     pub extract: bool,
@@ -70,237 +58,169 @@ impl Default for OutlineOptions {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct RectifyRequest {
-    pub input_path: PathBuf,
-    pub board_spec_source: BoardSpecSource,
-    pub output_dir: PathBuf,
-    /// Target output scale.  Defaults to 10 px/mm if not set.
+/// Options for the in-memory rectify pipeline.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RectifyOptions {
+    /// Target output scale. Defaults to 10 px/mm when `None`.
     pub pixels_per_mm: Option<f64>,
     pub outline: OutlineOptions,
 }
 
-impl RectifyRequest {
-    pub fn new(
-        input_path: PathBuf,
-        board_spec_source: BoardSpecSource,
-        output_dir: PathBuf,
-    ) -> Self {
+impl Default for RectifyOptions {
+    fn default() -> Self {
         Self {
-            input_path,
-            board_spec_source,
-            output_dir,
             pixels_per_mm: None,
             outline: OutlineOptions::default(),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct OutlineOutput {
-    pub svg_path: PathBuf,
-    pub dxf_path: PathBuf,
-    pub json_path: PathBuf,
-    pub mask_debug_path: PathBuf,
+// ---------------------------------------------------------------------------
+// In-memory result types (no filesystem paths). These are what WASM exports.
+// ---------------------------------------------------------------------------
+
+/// Fully serializable outline bundle produced by the in-memory pipeline.
+#[derive(Debug, Clone, Serialize)]
+pub struct OutlineBundle {
+    /// SVG document as a string.
+    pub svg: String,
+    /// DXF document as a string.
+    pub dxf: String,
+    /// `outline.json` payload.
+    pub json: serde_json::Value,
+    /// PNG-encoded piece mask (debug aid).
+    #[serde(skip_serializing)]
+    pub mask_png: Vec<u8>,
+    /// Polygon in millimetre coordinates on the board plane.
+    pub polygon_mm: Vec<[f64; 2]>,
+    /// Structured metadata (vertex counts, area, perimeter, segmentation).
     pub metadata: OutlineMetadata,
 }
 
+/// Result of the in-memory board-detection pass.
 #[derive(Debug, Clone)]
-pub struct RectifyRunResult {
-    pub prepared_input_path: PathBuf,
-    pub debug_overlay_path: PathBuf,
-    pub board_debug_path: PathBuf,
-    pub rectified_path: PathBuf,
-    pub transform_path: PathBuf,
-    pub quality_path: PathBuf,
-    pub board_spec_path: PathBuf,
-    pub pixels_per_mm: f64,
+pub struct DetectBoardOutcome {
+    pub detection: BoardDetectionDebug,
+    pub metadata: TransformMetadata,
+    /// PNG-encoded prepared (EXIF-oriented) input image.
+    pub prepared_png: Vec<u8>,
+    pub input_width_px: u32,
+    pub input_height_px: u32,
+    pub prepared_width_px: u32,
+    pub prepared_height_px: u32,
+}
+
+/// Result of the in-memory full rectify pass.
+#[derive(Debug)]
+pub struct RectifyOutcome {
+    pub detection: BoardDetectionDebug,
     pub quality: QualityReport,
-    pub outline: Option<OutlineOutput>,
+    pub metadata: TransformMetadata,
+    /// PNG-encoded prepared (EXIF-oriented) input image.
+    pub prepared_png: Vec<u8>,
+    /// PNG-encoded rectified output (may be empty if quality failed and
+    /// rectification was skipped).
+    pub rectified_png: Vec<u8>,
+    pub pixels_per_mm: f64,
+    pub outline: Option<OutlineBundle>,
+    /// True if quality check hard-failed and rectification was skipped.
+    pub quality_failed: bool,
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 checkpoint — board detection only
+// In-memory core — used by WASM and by the filesystem wrappers below
 // ---------------------------------------------------------------------------
 
-pub fn run_board_detection_checkpoint(
-    request: &BoardDetectionRequest,
-) -> Result<BoardDetectionRunResult> {
-    fs::create_dir_all(&request.output_dir).with_context(|| {
-        format!(
-            "failed to create output directory {}",
-            request.output_dir.display()
-        )
-    })?;
+/// Run board detection on in-memory image bytes, returning a serializable
+/// bundle of the detection debug, the prepared PNG, and transform metadata.
+pub fn detect_board_in_memory(
+    image_bytes: &[u8],
+    board_spec: &BoardSpec,
+) -> Result<DetectBoardOutcome> {
+    let loaded = load_image_from_bytes(image_bytes)?;
+    let detection = detect_board(&to_gray(&loaded.image), board_spec)?.debug;
+    let prepared_png = encode_png(&loaded.image)?;
 
-    let loaded = load_image(&request.input_path)?;
-    let board_spec = load_board_spec(&request.board_spec_source)?;
-    let board_spec_path = materialize_board_spec(&request.output_dir, &request.board_spec_source)?;
+    let metadata = build_metadata_board_only(&loaded, board_spec, &detection);
 
-    let prepared_input_path = request.output_dir.join("prepared_input.png");
-    loaded
-        .image
-        .save(&prepared_input_path)
-        .with_context(|| format!("failed to save {}", prepared_input_path.display()))?;
-
-    let board_debug_path = request.output_dir.join("board_debug.json");
-    let debug_overlay_path = request.output_dir.join("debug_overlay.png");
-    let gray = image::open(&prepared_input_path)
-        .with_context(|| format!("failed to reload {} as grayscale", prepared_input_path.display()))?
-        .to_luma8();
-    let detection = detect_board(&gray, &board_spec)?;
-    write_json_pretty_value(
-        &board_debug_path,
-        &serde_json::to_value(&detection.debug)?,
-    )?;
-    // Overlay: use the prepared input as placeholder (pure-Rust annotated overlay is not yet implemented).
-    loaded
-        .image
-        .save(&debug_overlay_path)
-        .with_context(|| format!("failed to save {}", debug_overlay_path.display()))?;
-
-    let transform = TransformMetadata {
-        schema_version: 1,
-        phase: "board_detection_checkpoint",
-        input_image: ImageMetadata {
-            width_px: loaded.original_width_px,
-            height_px: loaded.original_height_px,
-        },
-        prepared_image: ImageMetadata {
-            width_px: loaded.image.width(),
-            height_px: loaded.image.height(),
-        },
-        reference_board: ReferenceBoardMetadata {
-            board_id: board_spec.board_id.clone(),
-            squares_x: board_spec.squares_x,
-            squares_y: board_spec.squares_y,
-            square_size_mm: board_spec.square_size_mm,
-            marker_size_mm: board_spec.marker_size_mm,
-        },
-        board_detection: detection.debug.summary.clone(),
-        rectified_image: None,
-        scale: None,
-        homography_board_mm_to_image: None,
-        homography_image_to_board_mm: None,
-        outline: None,
-    };
-
-    let transform_path = request.output_dir.join("transform.json");
-    write_json_pretty(&transform_path, &transform)?;
-
-    Ok(BoardDetectionRunResult {
-        prepared_input_path,
-        debug_overlay_path,
-        board_debug_path,
-        transform_path,
-        board_spec_path,
+    Ok(DetectBoardOutcome {
+        detection,
+        metadata,
+        prepared_png,
+        input_width_px: loaded.original_width_px,
+        input_height_px: loaded.original_height_px,
+        prepared_width_px: loaded.image.width(),
+        prepared_height_px: loaded.image.height(),
     })
 }
 
-// ---------------------------------------------------------------------------
-// Phase 3 — full rectification
-// ---------------------------------------------------------------------------
+/// Run the full rectify pipeline on in-memory image bytes.
+///
+/// Always returns `Ok` (even when the quality gate fails, so callers can
+/// display the report); check `quality_failed` to see whether rectification
+/// was skipped.
+pub fn rectify_in_memory(
+    image_bytes: &[u8],
+    board_spec: &BoardSpec,
+    options: &RectifyOptions,
+) -> Result<RectifyOutcome> {
+    let loaded = load_image_from_bytes(image_bytes)?;
+    let prepared_png = encode_png(&loaded.image)?;
+    let detection = detect_board(&to_gray(&loaded.image), board_spec)?.debug;
 
-pub fn run_rectify(request: &RectifyRequest) -> Result<RectifyRunResult> {
-    fs::create_dir_all(&request.output_dir).with_context(|| {
-        format!(
-            "failed to create output directory {}",
-            request.output_dir.display()
-        )
-    })?;
+    let quality =
+        assess_quality(&loaded.image, &detection.summary).unwrap_or_else(|report| report.clone());
 
-    // --- Stage A: image ingestion ---
-    let loaded = load_image(&request.input_path)?;
-    let board_spec = load_board_spec(&request.board_spec_source)?;
-    let board_spec_path = materialize_board_spec(&request.output_dir, &request.board_spec_source)?;
-
-    let prepared_input_path = request.output_dir.join("prepared_input.png");
-    loaded
-        .image
-        .save(&prepared_input_path)
-        .with_context(|| format!("failed to save {}", prepared_input_path.display()))?;
-
-    // --- Stage C: board detection ---
-    let board_debug_path = request.output_dir.join("board_debug.json");
-    let debug_overlay_path = request.output_dir.join("debug_overlay.png");
-    let gray = image::open(&prepared_input_path)
-        .with_context(|| format!("failed to reload {} as grayscale", prepared_input_path.display()))?
-        .to_luma8();
-    let detection = detect_board(&gray, &board_spec)?;
-    write_json_pretty_value(
-        &board_debug_path,
-        &serde_json::to_value(&detection.debug)?,
-    )?;
-    // Overlay: use the prepared input as placeholder.
-    loaded
-        .image
-        .save(&debug_overlay_path)
-        .with_context(|| format!("failed to save {}", debug_overlay_path.display()))?;
-
-    // --- Stage B: capture quality validation ---
-    let quality_path = request.output_dir.join("quality.json");
-    let quality = assess_quality(&loaded.image, &detection.debug.summary)
-        .unwrap_or_else(|report| report.clone());
-
-    // Write quality.json before checking for failure so it is always emitted.
-    write_quality_json(&quality_path, &quality)?;
-
-    if quality.status == crate::quality::QualityStatus::Fail {
-        anyhow::bail!(
-            "capture quality check failed: {}",
-            quality.warnings.join("; ")
-        );
+    if quality.status == QualityStatus::Fail {
+        let metadata = build_metadata_board_only(&loaded, board_spec, &detection);
+        return Ok(RectifyOutcome {
+            detection,
+            quality,
+            metadata,
+            prepared_png,
+            rectified_png: Vec::new(),
+            pixels_per_mm: options.pixels_per_mm.unwrap_or(10.0),
+            outline: None,
+            quality_failed: true,
+        });
     }
 
-    // --- Stage D: homography estimation ---
-    let h_board_to_image =
-        Homography::from_rows(detection.debug.homography_board_mm_to_image);
+    let h_board_to_image = Homography::from_rows(detection.homography_board_mm_to_image);
     let h_image_to_board = h_board_to_image
         .inverse()
         .context("board homography is singular — cannot rectify")?;
 
-    // --- Stage E: metric scale ---
-    let pixels_per_mm = request.pixels_per_mm.unwrap_or(10.0);
+    let pixels_per_mm = options.pixels_per_mm.unwrap_or(10.0);
     let bounds = compute_rectified_bounds(
         loaded.image.width(),
         loaded.image.height(),
         &h_image_to_board,
     );
 
-    // --- Stage F: warp ---
     let (rectified, validity) =
         warp_image_with_validity(&loaded.image, &h_board_to_image, &bounds, pixels_per_mm);
-    let rectified_path = request.output_dir.join("rectified.png");
-    rectified
-        .save(&rectified_path)
-        .with_context(|| format!("failed to save {}", rectified_path.display()))?;
+    let rectified_png = encode_png(&rectified)?;
 
     let (out_w, out_h) = bounds.output_size_px(pixels_per_mm);
     let mm_per_pixel = 1.0 / pixels_per_mm;
 
-    // --- Stage G: outline extraction (optional) ---
-    let outline_output = if request.outline.extract {
-        match extract_outline(
+    let outline_bundle = if options.outline.extract {
+        match extract_outline_in_memory(
             &rectified,
             Some(&validity),
             &bounds,
             pixels_per_mm,
-            &board_spec,
-            &request.outline,
-            &request.output_dir,
+            board_spec,
+            &options.outline,
         ) {
-            Ok(output) => Some(output),
-            Err(e) => {
-                eprintln!("outline extraction failed: {e:#}");
-                None
-            }
+            Ok(bundle) => Some(bundle),
+            Err(_) => None,
         }
     } else {
         None
     };
 
-    // --- Emit transform.json ---
-    let transform = TransformMetadata {
+    let metadata = TransformMetadata {
         schema_version: 1,
         phase: "rectify",
         input_image: ImageMetadata {
@@ -318,50 +238,50 @@ pub fn run_rectify(request: &RectifyRequest) -> Result<RectifyRunResult> {
             square_size_mm: board_spec.square_size_mm,
             marker_size_mm: board_spec.marker_size_mm,
         },
-        board_detection: detection.debug.summary.clone(),
+        board_detection: detection.summary.clone(),
         rectified_image: Some(ImageMetadata {
             width_px: out_w,
             height_px: out_h,
         }),
+        rectified_bounds_mm: Some([
+            bounds.min_x_mm,
+            bounds.min_y_mm,
+            bounds.max_x_mm,
+            bounds.max_y_mm,
+        ]),
         scale: Some(ScaleMetadata {
             pixels_per_mm,
             mm_per_pixel,
         }),
         homography_board_mm_to_image: Some(*h_board_to_image.rows()),
         homography_image_to_board_mm: Some(*h_image_to_board.rows()),
-        outline: outline_output.as_ref().map(|o| o.metadata.clone()),
+        outline: outline_bundle.as_ref().map(|b| b.metadata.clone()),
     };
 
-    let transform_path = request.output_dir.join("transform.json");
-    write_json_pretty(&transform_path, &transform)?;
-
-    Ok(RectifyRunResult {
-        prepared_input_path,
-        debug_overlay_path,
-        board_debug_path,
-        rectified_path,
-        transform_path,
-        quality_path,
-        board_spec_path,
-        pixels_per_mm,
+    Ok(RectifyOutcome {
+        detection,
         quality,
-        outline: outline_output,
+        metadata,
+        prepared_png,
+        rectified_png,
+        pixels_per_mm,
+        outline: outline_bundle,
+        quality_failed: false,
     })
 }
 
 // ---------------------------------------------------------------------------
-// Outline extraction
+// Outline extraction (pure, in-memory)
 // ---------------------------------------------------------------------------
 
-fn extract_outline(
+fn extract_outline_in_memory(
     rectified: &RgbImage,
     validity: Option<&GrayImage>,
     bounds: &RectifiedBounds,
     pixels_per_mm: f64,
     board_spec: &BoardSpec,
     opts: &OutlineOptions,
-    output_dir: &Path,
-) -> Result<OutlineOutput> {
+) -> Result<OutlineBundle> {
     let board_margin_mm = opts.board_margin_mm.unwrap_or(board_spec.quiet_zone_mm);
 
     let seg_opts = SegmentationOptions::default_for_scale(
@@ -375,26 +295,12 @@ fn extract_outline(
 
     let seg = segment_piece_with_validity(rectified, validity, &seg_opts)?;
 
-    // Debug outputs so users (and tests) can inspect segmentation quality.
-    let mask_debug_path = output_dir.join("piece_mask.png");
-    seg.mask
-        .save(&mask_debug_path)
-        .with_context(|| format!("failed to save {}", mask_debug_path.display()))?;
-    let exclusion_debug_path = output_dir.join("board_exclusion.png");
-    let _ = seg.board_exclusion.save(&exclusion_debug_path);
-
     let pixel_contour = trace_outer_contour_px(&seg.mask)?;
     let raw_polygon = pixels_to_mm(&pixel_contour, bounds, pixels_per_mm);
     let raw_vertex_count = raw_polygon.len();
 
     let simplified = simplify_polygon(&raw_polygon, opts.simplify_mm);
-    let polygon: MmPolygon = if opts.smooth {
-        // Placeholder for future cubic-Bezier fit; keep identity for now so
-        // downstream output is deterministic.
-        simplified
-    } else {
-        simplified
-    };
+    let polygon: MmPolygon = if opts.smooth { simplified } else { simplified };
 
     let bbox = polygon
         .bbox()
@@ -402,13 +308,10 @@ fn extract_outline(
     let area_mm2 = polygon.area_abs();
     let perimeter_mm = polygon.perimeter();
 
-    let svg_path = output_dir.join("outline.svg");
-    write_svg(&svg_path, &polygon, bbox)?;
+    let svg = render_svg(&polygon, bbox);
+    let dxf = render_dxf(&polygon, bbox);
 
-    let dxf_path = output_dir.join("outline.dxf");
-    write_dxf(&dxf_path, &polygon, bbox)?;
-
-    let outline_json = build_outline_json_payload(
+    let json = build_outline_json_payload(
         &polygon,
         bbox,
         area_mm2,
@@ -417,14 +320,15 @@ fn extract_outline(
         opts.simplify_mm,
         seg.stats,
     );
-    let json_path = output_dir.join("outline.json");
-    write_outline_json(&json_path, &outline_json)?;
 
-    Ok(OutlineOutput {
-        svg_path,
-        dxf_path,
-        json_path,
-        mask_debug_path,
+    let mask_png = encode_png_gray(&seg.mask)?;
+
+    Ok(OutlineBundle {
+        svg,
+        dxf,
+        json,
+        mask_png,
+        polygon_mm: polygon.points.clone(),
         metadata: OutlineMetadata {
             vertex_count_raw: raw_vertex_count,
             vertex_count_simplified: polygon.len(),
@@ -435,6 +339,70 @@ fn extract_outline(
             segmentation: seg.stats,
         },
     })
+}
+
+// ---------------------------------------------------------------------------
+// Helpers (pure)
+// ---------------------------------------------------------------------------
+
+fn encode_png(image: &RgbImage) -> Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    image
+        .write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Png)
+        .context("failed to PNG-encode image")?;
+    Ok(buf)
+}
+
+fn encode_png_gray(image: &GrayImage) -> Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    image
+        .write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Png)
+        .context("failed to PNG-encode grayscale image")?;
+    Ok(buf)
+}
+
+fn to_gray(image: &RgbImage) -> GrayImage {
+    let (w, h) = image.dimensions();
+    let mut gray = GrayImage::new(w, h);
+    for (x, y, px) in image.enumerate_pixels() {
+        let [r, g, b] = px.0;
+        let luma = (0.299 * r as f64 + 0.587 * g as f64 + 0.114 * b as f64).round() as u8;
+        gray.put_pixel(x, y, image::Luma([luma]));
+    }
+    gray
+}
+
+fn build_metadata_board_only(
+    loaded: &LoadedImage,
+    board_spec: &BoardSpec,
+    detection: &BoardDetectionDebug,
+) -> TransformMetadata {
+    TransformMetadata {
+        schema_version: 1,
+        phase: "board_detection_checkpoint",
+        input_image: ImageMetadata {
+            width_px: loaded.original_width_px,
+            height_px: loaded.original_height_px,
+        },
+        prepared_image: ImageMetadata {
+            width_px: loaded.image.width(),
+            height_px: loaded.image.height(),
+        },
+        reference_board: ReferenceBoardMetadata {
+            board_id: board_spec.board_id.clone(),
+            squares_x: board_spec.squares_x,
+            squares_y: board_spec.squares_y,
+            square_size_mm: board_spec.square_size_mm,
+            marker_size_mm: board_spec.marker_size_mm,
+        },
+        board_detection: detection.summary.clone(),
+        rectified_image: None,
+        rectified_bounds_mm: None,
+        scale: None,
+        homography_board_mm_to_image: None,
+        homography_image_to_board_mm: None,
+        outline: None,
+    }
 }
 
 fn build_outline_json_payload(
@@ -479,9 +447,209 @@ fn build_outline_json_payload(
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Filesystem wrappers (native-only)
 // ---------------------------------------------------------------------------
 
+#[cfg(not(target_family = "wasm"))]
+#[derive(Debug, Clone)]
+pub struct BoardDetectionRequest {
+    pub input_path: PathBuf,
+    pub board_spec_source: BoardSpecSource,
+    pub output_dir: PathBuf,
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[derive(Debug, Clone)]
+pub struct BoardDetectionRunResult {
+    pub prepared_input_path: PathBuf,
+    pub debug_overlay_path: PathBuf,
+    pub board_debug_path: PathBuf,
+    pub transform_path: PathBuf,
+    pub board_spec_path: PathBuf,
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[derive(Debug, Clone)]
+pub struct RectifyRequest {
+    pub input_path: PathBuf,
+    pub board_spec_source: BoardSpecSource,
+    pub output_dir: PathBuf,
+    pub pixels_per_mm: Option<f64>,
+    pub outline: OutlineOptions,
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl RectifyRequest {
+    pub fn new(
+        input_path: PathBuf,
+        board_spec_source: BoardSpecSource,
+        output_dir: PathBuf,
+    ) -> Self {
+        Self {
+            input_path,
+            board_spec_source,
+            output_dir,
+            pixels_per_mm: None,
+            outline: OutlineOptions::default(),
+        }
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[derive(Debug, Clone)]
+pub struct OutlineOutput {
+    pub svg_path: PathBuf,
+    pub dxf_path: PathBuf,
+    pub json_path: PathBuf,
+    pub mask_debug_path: PathBuf,
+    pub metadata: OutlineMetadata,
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[derive(Debug, Clone)]
+pub struct RectifyRunResult {
+    pub prepared_input_path: PathBuf,
+    pub debug_overlay_path: PathBuf,
+    pub board_debug_path: PathBuf,
+    pub rectified_path: PathBuf,
+    pub transform_path: PathBuf,
+    pub quality_path: PathBuf,
+    pub board_spec_path: PathBuf,
+    pub pixels_per_mm: f64,
+    pub quality: QualityReport,
+    pub outline: Option<OutlineOutput>,
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub fn run_board_detection_checkpoint(
+    request: &BoardDetectionRequest,
+) -> Result<BoardDetectionRunResult> {
+    fs::create_dir_all(&request.output_dir).with_context(|| {
+        format!(
+            "failed to create output directory {}",
+            request.output_dir.display()
+        )
+    })?;
+
+    let bytes = fs::read(&request.input_path).with_context(|| {
+        format!("failed to read image {}", request.input_path.display())
+    })?;
+    let board_spec = load_board_spec(&request.board_spec_source)?;
+    let board_spec_path = materialize_board_spec(&request.output_dir, &request.board_spec_source)?;
+
+    let outcome = detect_board_in_memory(&bytes, &board_spec)?;
+
+    let prepared_input_path = request.output_dir.join("prepared_input.png");
+    fs::write(&prepared_input_path, &outcome.prepared_png)
+        .with_context(|| format!("failed to save {}", prepared_input_path.display()))?;
+
+    let debug_overlay_path = request.output_dir.join("debug_overlay.png");
+    fs::write(&debug_overlay_path, &outcome.prepared_png)
+        .with_context(|| format!("failed to save {}", debug_overlay_path.display()))?;
+
+    let board_debug_path = request.output_dir.join("board_debug.json");
+    write_json_pretty_value(&board_debug_path, &serde_json::to_value(&outcome.detection)?)?;
+
+    let transform_path = request.output_dir.join("transform.json");
+    write_json_pretty(&transform_path, &outcome.metadata)?;
+
+    Ok(BoardDetectionRunResult {
+        prepared_input_path,
+        debug_overlay_path,
+        board_debug_path,
+        transform_path,
+        board_spec_path,
+    })
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub fn run_rectify(request: &RectifyRequest) -> Result<RectifyRunResult> {
+    fs::create_dir_all(&request.output_dir).with_context(|| {
+        format!(
+            "failed to create output directory {}",
+            request.output_dir.display()
+        )
+    })?;
+
+    let bytes = fs::read(&request.input_path).with_context(|| {
+        format!("failed to read image {}", request.input_path.display())
+    })?;
+    let board_spec = load_board_spec(&request.board_spec_source)?;
+    let board_spec_path = materialize_board_spec(&request.output_dir, &request.board_spec_source)?;
+
+    let opts = RectifyOptions {
+        pixels_per_mm: request.pixels_per_mm,
+        outline: request.outline.clone(),
+    };
+    let outcome = rectify_in_memory(&bytes, &board_spec, &opts)?;
+
+    let prepared_input_path = request.output_dir.join("prepared_input.png");
+    fs::write(&prepared_input_path, &outcome.prepared_png)
+        .with_context(|| format!("failed to save {}", prepared_input_path.display()))?;
+
+    let debug_overlay_path = request.output_dir.join("debug_overlay.png");
+    fs::write(&debug_overlay_path, &outcome.prepared_png)
+        .with_context(|| format!("failed to save {}", debug_overlay_path.display()))?;
+
+    let board_debug_path = request.output_dir.join("board_debug.json");
+    write_json_pretty_value(&board_debug_path, &serde_json::to_value(&outcome.detection)?)?;
+
+    let quality_path = request.output_dir.join("quality.json");
+    write_quality_json(&quality_path, &outcome.quality)?;
+
+    if outcome.quality_failed {
+        anyhow::bail!(
+            "capture quality check failed: {}",
+            outcome.quality.warnings.join("; ")
+        );
+    }
+
+    let rectified_path = request.output_dir.join("rectified.png");
+    fs::write(&rectified_path, &outcome.rectified_png)
+        .with_context(|| format!("failed to save {}", rectified_path.display()))?;
+
+    let outline_output = if let Some(bundle) = outcome.outline.as_ref() {
+        let svg_path = request.output_dir.join("outline.svg");
+        fs::write(&svg_path, bundle.svg.as_bytes())
+            .with_context(|| format!("failed to write {}", svg_path.display()))?;
+        let dxf_path = request.output_dir.join("outline.dxf");
+        fs::write(&dxf_path, bundle.dxf.as_bytes())
+            .with_context(|| format!("failed to write {}", dxf_path.display()))?;
+        let json_path = request.output_dir.join("outline.json");
+        fs::write(&json_path, serde_json::to_string_pretty(&bundle.json)?)
+            .with_context(|| format!("failed to write {}", json_path.display()))?;
+        let mask_debug_path = request.output_dir.join("piece_mask.png");
+        fs::write(&mask_debug_path, &bundle.mask_png)
+            .with_context(|| format!("failed to write {}", mask_debug_path.display()))?;
+        Some(OutlineOutput {
+            svg_path,
+            dxf_path,
+            json_path,
+            mask_debug_path,
+            metadata: bundle.metadata.clone(),
+        })
+    } else {
+        None
+    };
+
+    let transform_path = request.output_dir.join("transform.json");
+    write_json_pretty(&transform_path, &outcome.metadata)?;
+
+    Ok(RectifyRunResult {
+        prepared_input_path,
+        debug_overlay_path,
+        board_debug_path,
+        rectified_path,
+        transform_path,
+        quality_path,
+        board_spec_path,
+        pixels_per_mm: outcome.pixels_per_mm,
+        quality: outcome.quality,
+        outline: outline_output,
+    })
+}
+
+#[cfg(not(target_family = "wasm"))]
 fn materialize_board_spec(output_dir: &Path, source: &BoardSpecSource) -> Result<PathBuf> {
     match source {
         BoardSpecSource::Path(path) => Ok(path.clone()),
@@ -496,18 +664,21 @@ fn materialize_board_spec(output_dir: &Path, source: &BoardSpecSource) -> Result
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn write_json_pretty(path: &Path, value: &TransformMetadata) -> Result<()> {
     let json = serde_json::to_string_pretty(value)?;
     fs::write(path, json).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn write_json_pretty_value(path: &Path, value: &serde_json::Value) -> Result<()> {
     let json = serde_json::to_string_pretty(value)?;
     fs::write(path, json).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn write_quality_json(path: &Path, report: &QualityReport) -> Result<()> {
     let json = serde_json::to_string_pretty(report)?;
     fs::write(path, json).with_context(|| format!("failed to write {}", path.display()))?;
@@ -518,7 +689,7 @@ fn write_quality_json(path: &Path, report: &QualityReport) -> Result<()> {
 // Tests
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
+#[cfg(all(test, not(target_family = "wasm")))]
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -559,7 +730,6 @@ mod tests {
         assert_eq!(transform["phase"], "board_detection_checkpoint");
         assert_eq!(transform["reference_board"]["board_id"], "refboard_v1");
         assert!(transform["board_detection"]["marker_count"].as_u64().unwrap() > 0);
-        // Rectification fields must be absent in the checkpoint phase.
         assert!(transform["rectified_image"].is_null());
         assert!(transform["scale"].is_null());
 
@@ -585,7 +755,6 @@ mod tests {
         })
         .unwrap();
 
-        // All output files must exist.
         assert!(result.prepared_input_path.exists(), "prepared_input.png missing");
         assert!(result.debug_overlay_path.exists(), "debug_overlay.png missing");
         assert!(result.board_debug_path.exists(), "board_debug.json missing");
@@ -593,7 +762,6 @@ mod tests {
         assert!(result.transform_path.exists(), "transform.json missing");
         assert!(result.quality_path.exists(), "quality.json missing");
 
-        // transform.json content checks.
         let transform: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&result.transform_path).unwrap()).unwrap();
         assert_eq!(transform["phase"], "rectify");
@@ -601,16 +769,13 @@ mod tests {
         assert!((transform["scale"]["mm_per_pixel"].as_f64().unwrap() - 0.2).abs() < 1e-9);
         assert!(transform["rectified_image"]["width_px"].as_u64().unwrap() > 0);
         assert!(transform["rectified_image"]["height_px"].as_u64().unwrap() > 0);
-        // Both homography matrices must be 3×3.
         let h = &transform["homography_board_mm_to_image"];
         assert_eq!(h.as_array().unwrap().len(), 3);
         assert_eq!(h[0].as_array().unwrap().len(), 3);
 
-        // rectified.png must be a valid, non-empty image.
         let img = image::open(&result.rectified_path).unwrap();
         assert!(img.width() > 0 && img.height() > 0);
 
-        // quality.json must parse and have status ok or warning (not fail).
         let quality: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&result.quality_path).unwrap()).unwrap();
         assert_eq!(quality["schema_version"], 1);
@@ -622,8 +787,6 @@ mod tests {
 
     #[test]
     fn rectify_scale_is_applied_correctly() {
-        // Running the same image at two different scales should produce
-        // proportionally different output dimensions.
         let base = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/refboard_v1/refboard_v1_letter.png");
 
@@ -658,7 +821,6 @@ mod tests {
         let img5 = image::open(&r5.rectified_path).unwrap();
         let img10 = image::open(&r10.rectified_path).unwrap();
 
-        // 10 px/mm should be roughly 2× the dimensions of 5 px/mm.
         let ratio_w = img10.width() as f64 / img5.width() as f64;
         let ratio_h = img10.height() as f64 / img5.height() as f64;
         assert!((ratio_w - 2.0).abs() < 0.05, "width ratio {ratio_w}");

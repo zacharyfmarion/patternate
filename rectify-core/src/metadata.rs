@@ -26,7 +26,7 @@ pub struct ScaleMetadata {
 /// The 3×3 homography stored row-major, matching the spec's `transform.json` layout.
 pub type HomographyMatrix = [[f64; 3]; 3];
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TransformMetadata {
     pub schema_version: u32,
     pub phase: &'static str,
@@ -37,6 +37,10 @@ pub struct TransformMetadata {
     /// Present only after the rectification stage.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rectified_image: Option<ImageMetadata>,
+    /// Rectified-image origin and extent in board-mm coordinates. Used by UI
+    /// overlays to map polygon-mm back onto the rectified PNG.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rectified_bounds_mm: Option<[f64; 4]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scale: Option<ScaleMetadata>,
     /// H that maps board-mm → image-px (forward direction from detection).

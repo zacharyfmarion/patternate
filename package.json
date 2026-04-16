@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:web": "yarn workspace web dev",
+    "dev:desktop": "cd apps/tauri/src-tauri && cargo tauri dev",
+    "build:web": "yarn workspace web build",
+    "build:wasm": "yarn workspace web build:wasm",
+    "lint": "yarn workspace web lint"
+  },
+  "packageManager": "yarn@3.4.1"
+}

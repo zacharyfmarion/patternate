@@ -1,10 +1,12 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
+
+/// Built-in board specs embedded into the binary so the library works
+/// without any filesystem presence (required for WASM).
+const REFBOARD_V1_JSON: &str =
+    include_str!("../../assets/refboard_v1/refboard_v1.json");
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -36,17 +38,51 @@ pub enum BoardSpecSource {
 
 pub fn load_board_spec(source: &BoardSpecSource) -> Result<BoardSpec> {
     match source {
-        BoardSpecSource::BuiltIn(board_id) => BoardSpec::from_path(&builtin_board_path(board_id)?),
+        BoardSpecSource::BuiltIn(board_id) => load_builtin_board_spec(board_id),
         BoardSpecSource::Path(path) => BoardSpec::from_path(path),
     }
 }
 
+/// Parse a board spec from an embedded JSON string.
+///
+/// Available in all build targets, including `wasm32-unknown-unknown`.
+pub fn load_builtin_board_spec(board_id: &str) -> Result<BoardSpec> {
+    let raw = match board_id {
+        "refboard_v1" => REFBOARD_V1_JSON,
+        other => bail!("unsupported built-in board `{other}`"),
+    };
+    BoardSpec::from_json_str(raw)
+        .with_context(|| format!("failed to parse built-in board spec `{board_id}`"))
+}
+
+/// Raw JSON for a built-in board (useful for the WASM surface).
+pub fn builtin_board_spec_json(board_id: &str) -> Result<&'static str> {
+    match board_id {
+        "refboard_v1" => Ok(REFBOARD_V1_JSON),
+        other => bail!("unsupported built-in board `{other}`"),
+    }
+}
+
 impl BoardSpec {
+    #[cfg(not(target_family = "wasm"))]
     pub fn from_path(path: &Path) -> Result<Self> {
-        let raw = fs::read_to_string(path)
+        let raw = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read board spec {}", path.display()))?;
         let spec: BoardSpec = serde_json::from_str(&raw)
             .with_context(|| format!("failed to parse board spec {}", path.display()))?;
+        spec.validate()?;
+        Ok(spec)
+    }
+
+    #[cfg(target_family = "wasm")]
+    pub fn from_path(_path: &Path) -> Result<Self> {
+        bail!("BoardSpec::from_path is not available on wasm targets; use from_json_str instead")
+    }
+
+    /// Parse and validate a board spec from a JSON string.
+    pub fn from_json_str(raw: &str) -> Result<Self> {
+        let spec: BoardSpec = serde_json::from_str(raw)
+            .with_context(|| "failed to parse board spec JSON")?;
         spec.validate()?;
         Ok(spec)
     }
@@ -89,7 +125,11 @@ impl BoardSpec {
     }
 }
 
-fn builtin_board_path(board_id: &str) -> Result<PathBuf> {
+/// Best-effort on-disk path for the built-in board spec. Used by the
+/// filesystem pipeline wrapper to copy the spec into an output dir.
+/// Returns `None` on WASM or when `CARGO_MANIFEST_DIR` is not set.
+#[cfg(not(target_family = "wasm"))]
+pub fn builtin_board_path(board_id: &str) -> Result<PathBuf> {
     match board_id {
         "refboard_v1" => Ok(Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/refboard_v1/refboard_v1.json")),

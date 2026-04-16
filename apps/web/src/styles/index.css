@@ -1,0 +1,1233 @@
+/* -------------------------------------------------------------------------
+ * Root tokens & global reset.
+ *
+ * Color variables are written at runtime by `applyTheme()`. The defaults
+ * below match the registry default (One Dark Pro) so SSR / first-paint
+ * still looks right before the store initializer runs.
+ * -------------------------------------------------------------------------*/
+
+:root {
+  /* Numeric spacing scale (px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Semantic spacing aliases */
+  --space-control-gap: var(--space-2);
+  --space-label-gap: var(--space-2);
+  --space-helper-gap: var(--space-1);
+  --space-field-gap: var(--space-4);
+  --space-section-gap: var(--space-5);
+  --space-dialog-padding-x: var(--space-6);
+  --space-dialog-padding-y: var(--space-6);
+  --space-dialog-footer-gap: var(--space-3);
+
+  /* Radius scale */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows (tuned for both light and dark themes) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.16);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.32);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 160ms;
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Default colors — overridden by applyTheme(). */
+  --bg-primary: #282c34;
+  --bg-secondary: #21252b;
+  --bg-tertiary: #3e4451;
+  --bg-elevated: #2c313c;
+  --text-primary: #abb2bf;
+  --text-secondary: #9da5b4;
+  --text-tertiary: #5c6370;
+  --text-inverse: #282c34;
+  --border-primary: #3e4451;
+  --border-secondary: #5c6370;
+  --border-focus: #61afef;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --accent-primary: #61afef;
+  --accent-secondary: #56b6c2;
+  --accent-hover: #c678dd;
+  --color-error: #e06c75;
+  --color-warning: #e5c07b;
+  --color-success: #98c379;
+  --color-info: #61afef;
+
+  /* Legacy aliases (also emitted by applyTheme to stay in sync). */
+  --fg-primary: var(--text-primary);
+  --fg-secondary: var(--text-secondary);
+  --fg-muted: var(--text-tertiary);
+  --border: var(--border-primary);
+  --border-strong: var(--border-secondary);
+  --accent: var(--accent-primary);
+  --accent-fg: var(--text-inverse);
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+  --danger: var(--color-error);
+  --bg-input: var(--bg-secondary);
+  --bg-hover: var(--bg-tertiary);
+  --bg-active: var(--bg-elevated);
+  --toolbar-bg: var(--bg-secondary);
+  --panel-bg: var(--bg-primary);
+  --panel-header-bg: var(--bg-secondary);
+  --scrollbar: var(--bg-tertiary);
+
+  color-scheme: dark;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+:root[data-theme-type='light'] {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--fg-primary);
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 5px;
+}
+
+/* -------------------------------------------------------------------------
+ * App layout
+ * -------------------------------------------------------------------------*/
+
+.pd-app {
+  display: grid;
+  grid-template-rows: 48px 1fr auto;
+  height: 100%;
+  width: 100%;
+  background: var(--bg-primary);
+}
+
+.pd-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+}
+
+.pd-topbar h1 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.02em;
+  color: var(--fg-primary);
+}
+
+.pd-topbar .pd-spacer {
+  flex: 1;
+}
+
+.pd-topbar button,
+.pd-iconbtn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-secondary);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.pd-topbar button:hover,
+.pd-iconbtn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+/* -------------------------------------------------------------------------
+ * Dockview wrapper — dockview needs a positioned, sized parent.
+ * -------------------------------------------------------------------------*/
+
+.pd-dockview-wrap {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Dockview theme (scoped class set on the DockviewReact component)
+ * -------------------------------------------------------------------------*/
+
+/**
+ * Dockview 4 reads these `--dv-*` tokens. We must pass `theme={{ className: '' }}`
+ * on DockviewReact so the library does not also add `dockview-theme-abyss` (the
+ * default), whose rules in dockview.css would override this block when it loads
+ * before our stylesheet.
+ */
+.dockview-theme-pattern-detector {
+  --dv-paneview-active-outline-color: var(--border-focus);
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tabs-and-actions-container-height: 32px;
+  --dv-tabs-and-actions-container-background-color: var(--toolbar-bg);
+  --dv-group-view-background-color: var(--panel-bg);
+  --dv-tab-divider-color: var(--border-subtle);
+  --dv-paneview-header-border-color: var(--border-subtle);
+  --dv-separator-border: var(--border-subtle);
+  --dv-scrollbar-background-color: color-mix(in srgb, var(--fg-primary) 22%, transparent);
+  --dv-icon-hover-background-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  --dv-floating-box-shadow: var(--shadow-lg);
+  /* Active tab matches panel body; inactive tabs stay on the strip color. */
+  --dv-activegroup-visiblepanel-tab-background-color: var(--panel-bg);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--toolbar-bg);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--panel-bg);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--toolbar-bg);
+  --dv-activegroup-visiblepanel-tab-color: var(--fg-primary);
+  --dv-activegroup-hiddenpanel-tab-color: var(--fg-secondary);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--fg-secondary);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--fg-muted);
+  --dv-drag-over-background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  --dv-drag-over-border-color: var(--accent);
+}
+
+.dockview-theme-pattern-detector .dv-tabs-and-actions-container {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dockview-theme-pattern-detector
+  .dv-split-view-container.dv-horizontal
+  > .dv-sash-container
+  > .dv-sash {
+  width: 6px;
+}
+
+.dockview-theme-pattern-detector
+  .dv-split-view-container.dv-vertical
+  > .dv-sash-container
+  > .dv-sash {
+  height: 6px;
+}
+
+.dockview-theme-pattern-detector
+  .dv-split-view-container
+  .dv-sash-container
+  .dv-sash:not(.disabled):hover,
+.dockview-theme-pattern-detector
+  .dv-split-view-container
+  .dv-sash-container
+  .dv-sash:not(.disabled):active {
+  background-color: var(--accent);
+  transition: background-color 0.15s ease;
+  transition-delay: 0.2s;
+}
+
+/* -------------------------------------------------------------------------
+ * Panels
+ * -------------------------------------------------------------------------*/
+
+.pd-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  padding: var(--space-4);
+  gap: var(--space-3);
+  background: var(--panel-bg);
+  color: var(--fg-primary);
+}
+
+.pd-panel h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-primary);
+}
+
+.pd-panel h3 {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pd-panel p {
+  margin: 0;
+  color: var(--fg-secondary);
+}
+
+.pd-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pd-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.pd-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.pd-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.pd-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.pd-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.pd-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pd-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.pd-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.pd-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--fg-secondary);
+}
+
+.pd-btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border);
+  color: var(--fg-primary);
+}
+
+.pd-btn-run {
+  padding: var(--space-2) var(--space-4);
+  font-weight: 600;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* -------------------------------------------------------------------------
+ * Capture drop zone
+ * -------------------------------------------------------------------------*/
+
+.pd-dropzone {
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--fg-secondary);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+  cursor: pointer;
+}
+
+.pd-dropzone:hover,
+.pd-dropzone[data-drag='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--fg-primary);
+}
+
+.pd-dropzone-lg {
+  padding: var(--space-8) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pd-dropzone-lg strong {
+  font-size: 15px;
+  color: var(--fg-primary);
+}
+
+.pd-dropzone-hint {
+  max-width: 380px;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.pd-sample-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+
+.pd-sample-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--fg-secondary);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.pd-sample-card:hover {
+  transform: translateY(-1px);
+}
+
+.pd-sample-card:hover {
+  border-color: var(--accent);
+}
+
+.pd-sample-card img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #000;
+  display: block;
+}
+
+.pd-sample-card span {
+  padding: 6px 8px;
+  font-size: 11px;
+  text-align: left;
+  color: var(--fg-primary);
+}
+
+/* -------------------------------------------------------------------------
+ * Inspector
+ * -------------------------------------------------------------------------*/
+
+.pd-inspector {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  padding: var(--space-4);
+  gap: var(--space-3);
+  background: var(--panel-bg);
+  color: var(--fg-primary);
+}
+
+.pd-inspector h2 {
+  margin: 0 0 var(--space-1);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-primary);
+}
+
+.pd-inspector p {
+  color: var(--fg-muted);
+  margin: 0;
+  font-size: 12px;
+}
+
+.pd-inspector-section {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pd-inspector-section > strong {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.pd-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.pd-kv dt {
+  color: var(--fg-muted);
+}
+
+.pd-kv dd {
+  margin: 0;
+  color: var(--fg-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-quality-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pd-quality-ok {
+  background: rgba(47, 201, 138, 0.18);
+  color: var(--success);
+}
+.pd-quality-warning {
+  background: rgba(240, 180, 0, 0.18);
+  color: var(--warning);
+}
+.pd-quality-fail {
+  background: rgba(240, 92, 92, 0.2);
+  color: var(--danger);
+}
+
+/* -------------------------------------------------------------------------
+ * Image viewport & overlays
+ * -------------------------------------------------------------------------*/
+
+.pd-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 300px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: auto;
+  display: grid;
+  place-items: center;
+}
+
+.pd-viewport img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+}
+
+.pd-overlay-stack {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+.pd-overlay-stack > canvas,
+.pd-overlay-stack > svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pd-overlay-stack > svg.pd-edit-overlay {
+  pointer-events: auto;
+}
+
+.pd-overlay-stack > img {
+  position: relative;
+}
+
+.pd-viewport-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--fg-primary);
+  font-size: 13px;
+  z-index: 2;
+}
+
+/* -------------------------------------------------------------------------
+ * Validation banner
+ * -------------------------------------------------------------------------*/
+
+.pd-validation {
+  border: 1px solid rgba(240, 92, 92, 0.5);
+  border-radius: 6px;
+  background: rgba(240, 92, 92, 0.08);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--fg-primary);
+}
+
+.pd-validation-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger);
+}
+
+.pd-validation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-secondary);
+}
+
+.pd-validation-body ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--fg-secondary);
+}
+
+.pd-validation-hints {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+/* -------------------------------------------------------------------------
+ * Spinner
+ * -------------------------------------------------------------------------*/
+
+.pd-spinner {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  animation: pd-spin 0.9s linear infinite;
+}
+
+.pd-spinner-sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+@keyframes pd-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Inspector extras
+ * -------------------------------------------------------------------------*/
+
+.pd-inspector-hint {
+  color: var(--fg-secondary) !important;
+  font-size: 12px;
+}
+
+.pd-export-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.pd-export-grid .pd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.pd-warnings {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--warning);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* -------------------------------------------------------------------------
+ * Edit mode (spline curve editor)
+ * -------------------------------------------------------------------------*/
+
+.pd-edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  user-select: none;
+}
+
+.pd-edit-toolgroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-right: 1px solid var(--border);
+}
+
+.pd-edit-toolgroup:last-of-type {
+  border-right: none;
+}
+
+.pd-iconbtn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.pd-iconbtn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+  border-color: var(--border);
+}
+
+.pd-iconbtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pd-iconbtn[data-active='true'] {
+  background: var(--bg-active);
+  color: var(--fg-primary);
+  border-color: var(--border-strong);
+}
+
+.pd-btn[data-active='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.pd-edit-overlay {
+  cursor: default;
+}
+
+.pd-edit-overlay.pd-edit-tool-pen {
+  cursor: crosshair;
+}
+
+/* -------------------------------------------------------------------------
+ * Log panel
+ * -------------------------------------------------------------------------*/
+
+.pd-logbar {
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  max-height: 160px;
+  overflow: auto;
+  padding: 6px 12px;
+}
+
+.pd-log-entry {
+  display: flex;
+  gap: 8px;
+  padding: 1px 0;
+}
+
+.pd-log-time {
+  color: var(--fg-muted);
+  flex: 0 0 72px;
+}
+
+.pd-log-level-info {
+  color: var(--fg-secondary);
+}
+.pd-log-level-success {
+  color: var(--success);
+}
+.pd-log-level-warning {
+  color: var(--warning);
+}
+.pd-log-level-error {
+  color: var(--danger);
+}
+
+/* -------------------------------------------------------------------------
+ * Settings dialog (Radix Dialog — Cascade-style split layout)
+ * -------------------------------------------------------------------------*/
+
+.pd-settings-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(4px);
+  animation: pd-fade-in var(--duration-base) var(--ease-out);
+}
+
+.pd-settings-dialog-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 1001;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  width: min(640px, calc(100vw - var(--space-8)));
+  height: min(520px, calc(100vh - var(--space-8)));
+  max-height: 90vh;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  color: var(--fg-primary);
+  box-shadow: var(--shadow-lg);
+  outline: none;
+  animation: pd-modal-in var(--duration-base) var(--ease-out);
+  /* Flex column + overflow hidden so the main pane can shrink and scroll internally. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pd-settings-dialog-content:focus {
+  outline: none;
+}
+
+.pd-settings-dialog-shell {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.pd-settings-dialog-nav {
+  width: 168px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) 0;
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.pd-settings-dialog-nav-title {
+  padding: 0 var(--space-5) var(--space-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.pd-settings-dialog-nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-5);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--fg-secondary);
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.pd-settings-dialog-nav-item:hover {
+  color: var(--fg-primary);
+  background: color-mix(in srgb, var(--fg-primary) 6%, transparent);
+}
+
+.pd-settings-dialog-nav-item[data-active='true'] {
+  font-weight: 600;
+  color: var(--fg-primary);
+  background: var(--bg-secondary);
+  border-left-color: var(--accent);
+}
+
+.pd-settings-dialog-nav-item:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.pd-settings-dialog-main {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+  height: 100%;
+  /* Grid + minmax(0,1fr) fixes flex min-height:auto so the pane can shrink and scroll. */
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.pd-settings-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pd-settings-dialog-heading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-primary);
+}
+
+.pd-settings-dialog-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.pd-settings-dialog-close:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.pd-settings-dialog-close:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.pd-settings-dialog-scroll {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section-gap);
+  -webkit-overflow-scrolling: touch;
+}
+
+.pd-settings-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-dialog-footer-gap);
+  margin-top: auto;
+  padding-top: var(--space-3);
+}
+
+.pd-settings-dialog-footer-end {
+  justify-content: flex-end;
+}
+
+/* -------------------------------------------------------------------------
+ * Modals (simple — About, Shortcuts)
+ * -------------------------------------------------------------------------*/
+
+.pd-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  animation: pd-fade-in var(--duration-base) var(--ease-out);
+}
+
+.pd-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  min-width: 480px;
+  max-width: 680px;
+  max-height: 85vh;
+  overflow: auto;
+  padding: var(--space-dialog-padding-y) var(--space-dialog-padding-x);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section-gap);
+  color: var(--fg-primary);
+  box-shadow: var(--shadow-lg);
+  animation: pd-modal-in var(--duration-base) var(--ease-out);
+}
+
+.pd-modal h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg-primary);
+}
+
+.pd-form-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  align-items: center;
+  gap: var(--space-control-gap);
+  font-size: 13px;
+}
+
+.pd-form-row label {
+  color: var(--fg-secondary);
+}
+
+.pd-form-row input[type='number'],
+.pd-form-row input[type='text'],
+.pd-form-row select {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  width: 100%;
+  font-size: 13px;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.pd-form-row input[type='number']:focus,
+.pd-form-row input[type='text']:focus,
+.pd-form-row select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(97, 175, 239, 0.18);
+}
+
+.pd-form-row input[type='checkbox'] {
+  justify-self: flex-start;
+  accent-color: var(--accent);
+}
+
+.pd-sep {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-2) 0;
+}
+
+@keyframes pd-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pd-modal-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* -------------------------------------------------------------------------
+ * Settings primitives (SettingsCard, SettingsCardHeader, SettingsCardSection)
+ * -------------------------------------------------------------------------*/
+
+.pd-settings-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.pd-settings-card__header {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pd-settings-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-primary);
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.pd-settings-card__description {
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin: 0;
+}
+
+.pd-settings-card__section {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-field-gap);
+}
+
+.pd-settings-card__section + .pd-settings-card__section {
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* -------------------------------------------------------------------------
+ * Theme picker (grid of color-swatch cards)
+ * -------------------------------------------------------------------------*/
+
+.pd-theme-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-field-gap);
+}
+
+.pd-theme-picker__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-label-gap);
+}
+
+.pd-theme-picker__category {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--fg-muted);
+}
+
+.pd-theme-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-control-gap);
+}
+
+.pd-theme-card {
+  appearance: none;
+  font: inherit;
+  text-align: left;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  cursor: pointer;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.pd-theme-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+
+.pd-theme-card:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.pd-theme-card[data-selected='true'] {
+  border: 2px solid var(--accent);
+  padding: calc(var(--space-3) - 1px);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.pd-theme-card__name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pd-theme-card[data-selected='true'] .pd-theme-card__name {
+  font-weight: 600;
+}
+
+.pd-theme-card__swatches {
+  display: flex;
+  height: 14px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.pd-theme-card__swatch {
+  flex: 1;
+}

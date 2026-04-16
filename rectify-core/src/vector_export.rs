@@ -5,18 +5,20 @@
 //! preserves the input orientation (y-down, same as image pixels); the
 //! DXF flips y so that CAD users see the expected y-up convention.
 
-use std::{fs, path::Path};
+#[cfg(not(target_family = "wasm"))]
+use std::path::Path;
 
+#[cfg(not(target_family = "wasm"))]
 use anyhow::{Context, Result};
 
 use crate::contour::MmPolygon;
 
-/// Write a single closed path SVG with real-world millimetre units.
+/// Render a single closed path SVG with real-world millimetre units.
 ///
 /// `bbox_mm = [min_x, min_y, max_x, max_y]` controls the page extents.
 /// Passing the polygon's bounding box gives a tight page; passing the
 /// rectified image bounds preserves the polygon's position in the scene.
-pub fn write_svg(path: &Path, polygon: &MmPolygon, bbox_mm: [f64; 4]) -> Result<()> {
+pub fn render_svg(polygon: &MmPolygon, bbox_mm: [f64; 4]) -> String {
     let [min_x, min_y, max_x, max_y] = bbox_mm;
     let width = (max_x - min_x).max(0.001);
     let height = (max_y - min_y).max(0.001);
@@ -35,7 +37,7 @@ pub fn write_svg(path: &Path, polygon: &MmPolygon, bbox_mm: [f64; 4]) -> Result<
         d.push_str(" Z");
     }
 
-    let body = format!(
+    format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
          <svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" \
          width=\"{w:.4}mm\" height=\"{h:.4}mm\" \
@@ -48,18 +50,24 @@ pub fn write_svg(path: &Path, polygon: &MmPolygon, bbox_mm: [f64; 4]) -> Result<
         w = width,
         h = height,
         d = d
-    );
+    )
+}
 
-    fs::write(path, body).with_context(|| format!("failed to write SVG {}", path.display()))?;
+/// Write the SVG rendered by [`render_svg`] to disk.
+#[cfg(not(target_family = "wasm"))]
+pub fn write_svg(path: &Path, polygon: &MmPolygon, bbox_mm: [f64; 4]) -> Result<()> {
+    let body = render_svg(polygon, bbox_mm);
+    std::fs::write(path, body)
+        .with_context(|| format!("failed to write SVG {}", path.display()))?;
     Ok(())
 }
 
-/// Write a minimal DXF R12 ASCII file containing one closed
+/// Render a minimal DXF R12 ASCII file containing one closed
 /// `LWPOLYLINE` on layer `PATTERN` with millimetre units.
 ///
 /// Y is flipped so CAD software shows the polygon right-side-up
 /// (DXF / most CAD tools use y-up).
-pub fn write_dxf(path: &Path, polygon: &MmPolygon, bbox_mm: [f64; 4]) -> Result<()> {
+pub fn render_dxf(polygon: &MmPolygon, bbox_mm: [f64; 4]) -> String {
     let [_, _, _, max_y] = bbox_mm;
 
     let n = polygon.points.len();
@@ -92,15 +100,23 @@ pub fn write_dxf(path: &Path, polygon: &MmPolygon, bbox_mm: [f64; 4]) -> Result<
     body.push_str("0\nENDSEC\n");
 
     body.push_str("0\nEOF\n");
+    body
+}
 
-    fs::write(path, body).with_context(|| format!("failed to write DXF {}", path.display()))?;
+/// Write the DXF rendered by [`render_dxf`] to disk.
+#[cfg(not(target_family = "wasm"))]
+pub fn write_dxf(path: &Path, polygon: &MmPolygon, bbox_mm: [f64; 4]) -> Result<()> {
+    let body = render_dxf(polygon, bbox_mm);
+    std::fs::write(path, body)
+        .with_context(|| format!("failed to write DXF {}", path.display()))?;
     Ok(())
 }
 
 /// Emit an `outline.json` sidecar describing the extracted polygon.
+#[cfg(not(target_family = "wasm"))]
 pub fn write_outline_json(path: &Path, value: &serde_json::Value) -> Result<()> {
     let s = serde_json::to_string_pretty(value)?;
-    fs::write(path, s).with_context(|| format!("failed to write {}", path.display()))?;
+    std::fs::write(path, s).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
 
@@ -108,7 +124,7 @@ pub fn write_outline_json(path: &Path, value: &serde_json::Value) -> Result<()> 
 // Tests
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
+#[cfg(all(test, not(target_family = "wasm")))]
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};

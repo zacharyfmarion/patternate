@@ -1,4 +1,18 @@
 [workspace]
-members = ["rectify-core", "rectify-cli"]
+members = [
+    "rectify-core",
+    "rectify-cli",
+    "rectify-wasm",
+    "apps/tauri/src-tauri",
+]
 resolver = "3"
 
+# Keep dev builds of heavy deps fast.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev.package.rectify-core]
+opt-level = 2
+
+[profile.dev.package.rectify-wasm]
+opt-level = 2

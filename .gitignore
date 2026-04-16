@@ -6,3 +6,20 @@
 
 
 /.venv
+
+# Node / Yarn
+node_modules
+.yarn/*
+!.yarn/releases
+!.yarn/patches
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+.yarnrc.yml
+.yarn
+
+# Web
+apps/web/dist
+apps/web/src/wasm-pkg
+

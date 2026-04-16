@@ -299,12 +299,15 @@ pub fn segment_piece_with_validity(
     // Re-exclude after closing (dilation may have bled in).
     zero_where_excluded(&mut foreground, &exclusion);
 
-    if let Ok(path) = std::env::var("RECTIFY_DEBUG_SEG_DIR") {
-        let p = std::path::Path::new(&path);
-        let _ = std::fs::create_dir_all(p);
-        let _ = exclusion.save(p.join("dbg_exclusion.png"));
-        let _ = foreground.save(p.join("dbg_foreground.png"));
-        let _ = distance_image.save(p.join("dbg_distance.png"));
+    #[cfg(not(target_family = "wasm"))]
+    {
+        if let Ok(path) = std::env::var("RECTIFY_DEBUG_SEG_DIR") {
+            let p = std::path::Path::new(&path);
+            let _ = std::fs::create_dir_all(p);
+            let _ = exclusion.save(p.join("dbg_exclusion.png"));
+            let _ = foreground.save(p.join("dbg_foreground.png"));
+            let _ = distance_image.save(p.join("dbg_distance.png"));
+        }
     }
 
     let labels: Image<Luma<u32>> =

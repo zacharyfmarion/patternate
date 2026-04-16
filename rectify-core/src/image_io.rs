@@ -1,12 +1,19 @@
+use std::io::Cursor;
+
+#[cfg(not(target_family = "wasm"))]
+use std::path::Path;
+
+#[cfg(all(target_os = "macos", not(target_family = "wasm")))]
 use std::{
     fs,
-    io::Cursor,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
+#[cfg(all(target_os = "macos", not(target_family = "wasm")))]
+use anyhow::bail;
 use exif::{In, Reader, Tag, Value};
 use image::{DynamicImage, GenericImageView, RgbImage, imageops};
 
@@ -50,11 +57,32 @@ struct DecodedImage {
     decoder_applied_orientation: bool,
 }
 
+/// Load an image from a filesystem path. Not available on WASM.
+#[cfg(not(target_family = "wasm"))]
 pub fn load_image(path: &Path) -> Result<LoadedImage> {
     let bytes =
-        fs::read(path).with_context(|| format!("failed to read image {}", path.display()))?;
+        std::fs::read(path).with_context(|| format!("failed to read image {}", path.display()))?;
     let orientation = read_exif_orientation(&bytes).unwrap_or(ExifOrientation::Normal);
-    let decoded = decode_image_bytes(path, &bytes)?;
+    let decoded = decode_image_bytes_native(path, &bytes)?;
+    finalize_loaded(decoded, orientation)
+}
+
+/// Decode an image from an in-memory byte slice. Works on any target,
+/// including `wasm32-unknown-unknown`.
+///
+/// HEIC/HEIF bytes are rejected on non-native targets; JPEG/PNG/WebP/GIF
+/// all work via the `image` crate.
+pub fn load_image_from_bytes(bytes: &[u8]) -> Result<LoadedImage> {
+    let orientation = read_exif_orientation(bytes).unwrap_or(ExifOrientation::Normal);
+    let decoded = DecodedImage {
+        image: image::load_from_memory(bytes)
+            .with_context(|| "failed to decode image bytes")?,
+        decoder_applied_orientation: false,
+    };
+    finalize_loaded(decoded, orientation)
+}
+
+fn finalize_loaded(decoded: DecodedImage, orientation: ExifOrientation) -> Result<LoadedImage> {
     let (original_width_px, original_height_px) = decoded.image.dimensions();
     let (oriented, orientation_applied) = if decoded.decoder_applied_orientation {
         (decoded.image, ExifOrientation::Normal)
@@ -87,7 +115,8 @@ pub fn apply_orientation(image: DynamicImage, orientation: ExifOrientation) -> D
     }
 }
 
-fn decode_image_bytes(path: &Path, bytes: &[u8]) -> Result<DecodedImage> {
+#[cfg(not(target_family = "wasm"))]
+fn decode_image_bytes_native(path: &Path, bytes: &[u8]) -> Result<DecodedImage> {
     match image::load_from_memory(bytes) {
         Ok(image) => Ok(DecodedImage {
             image,
@@ -105,13 +134,14 @@ fn decode_image_bytes(path: &Path, bytes: &[u8]) -> Result<DecodedImage> {
                     });
                 }
             }
+            let _ = path;
 
             Err(primary_err).with_context(|| format!("failed to decode image {}", path.display()))
         }
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(target_family = "wasm")))]
 fn decode_heif_via_sips(path: &Path) -> Result<DecodedImage> {
     let temp_path = temp_transcode_path("png");
     let status = Command::new("sips")
@@ -143,6 +173,7 @@ fn decode_heif_via_sips(path: &Path) -> Result<DecodedImage> {
     })
 }
 
+#[cfg(all(target_os = "macos", not(target_family = "wasm")))]
 fn is_heif_path(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
@@ -150,7 +181,7 @@ fn is_heif_path(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(target_family = "wasm")))]
 fn temp_transcode_path(extension: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -205,6 +236,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(all(target_os = "macos", not(target_family = "wasm")))]
     fn detects_heif_extensions_case_insensitively() {
         assert!(is_heif_path(Path::new("photo.heic")));
         assert!(is_heif_path(Path::new("photo.HEIF")));
