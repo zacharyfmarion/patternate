@@ -20,6 +20,7 @@ function wasmHotRebuild(): PluginOption {
       return;
     }
     building = true;
+    fs.rmSync(outDir, { recursive: true, force: true });
     const cmd = `wasm-pack build ${wasmCrate} --target web --out-dir ${outDir}`;
     server.config.logger.info('\x1b[36m[wasm] Rebuilding...\x1b[0m');
     const start = Date.now();

@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Play, RotateCcw, Upload, AlertTriangle, Pencil } from 'lucide-react';
+import {
+  Play,
+  RotateCcw,
+  Upload,
+  AlertTriangle,
+  Pencil,
+  Download,
+  Camera,
+  FileImage,
+  CheckCircle2,
+} from 'lucide-react';
 
 import { usePipelineStore } from '../store/pipelineStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -7,6 +17,10 @@ import { useEditStore } from '../store/editStore';
 import { EditOverlay, useEditKeyboardShortcuts } from './EditOverlay';
 import { EditToolbar } from './EditToolbar';
 import type { BoardDetectionDebug, RectifyResult } from '../engine/types';
+import refboardA4PdfUrl from '../../../../assets/refboard_v1/refboard_v1_a4.pdf?url';
+import refboardLetterPdfUrl from '../../../../assets/refboard_v1/refboard_v1_letter.pdf?url';
+import refboardA4PreviewUrl from '../../../../assets/refboard_v1/refboard_v1_a4.png?url';
+import refboardLetterPreviewUrl from '../../../../assets/refboard_v1/refboard_v1_letter.png?url';
 
 // ---------------------------------------------------------------------------
 // Sample gallery
@@ -36,6 +50,18 @@ const SAMPLES: Sample[] = Object.entries(SAMPLE_PNG_MAP)
     return { name, url: pngUrl, thumbUrl };
   })
   .sort((a, b) => a.name.localeCompare(b.name));
+
+const FEATURED_SAMPLE =
+  SAMPLES.find((sample) => sample.name === 'dark_on_light') ?? SAMPLES[0] ?? null;
+
+const PHOTO_TIPS = [
+  'Print the paper at 100% scale and keep it flat on a table or floor.',
+  'Keep the whole paper visible with a little margin around the edges.',
+  'Place the printed paper beside the pattern piece, on the same flat surface.',
+  'Use even, bright light so the markers stay crisp and easy to detect.',
+  'Hold the camera steady and avoid blur, glare, hard shadows, or folds in the paper.',
+  'Frame both the printed paper and the pattern piece in the same photo.',
+] as const;
 
 // ---------------------------------------------------------------------------
 // Overlay renderers
@@ -208,43 +234,123 @@ export function WorkspacePanel() {
   if (!fileName) {
     return (
       <div className="pd-panel">
-        <div
-          className="pd-dropzone pd-dropzone-lg"
-          data-drag={dragging}
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+            e.currentTarget.value = '';
           }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-        >
-          <Upload size={32} />
-          <strong>Drop an image to begin</strong>
-          <div className="pd-dropzone-hint">
-            A photo of a ChArUco reference board with a pattern piece on top.
-            JPEG, PNG, or WebP.
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFile(f);
-            }}
-          />
-        </div>
+        />
 
-        <h3>Or try a synthetic sample</h3>
-        <div className="pd-sample-grid">
+        <section className="pd-onboarding">
+          <div className="pd-onboarding-grid">
+            <section className="pd-step-card">
+              <div className="pd-step-badge">Step 1</div>
+              <div className="pd-step-header">
+                <div className="pd-step-icon">
+                  <Download size={18} />
+                </div>
+                <div>
+                  <h3>Print the reference paper</h3>
+                  <p>Download the PDF that matches your paper size.</p>
+                </div>
+              </div>
+
+              <div className="pd-board-downloads">
+                <a className="pd-board-card" href={refboardLetterPdfUrl} download>
+                  <img src={refboardLetterPreviewUrl} alt="Printable reference paper, US Letter" />
+                  <strong>US Letter PDF</strong>
+                  <span>Best for standard printers in the U.S.</span>
+                </a>
+                <a className="pd-board-card" href={refboardA4PdfUrl} download>
+                  <img src={refboardA4PreviewUrl} alt="Printable reference paper, A4" />
+                  <strong>A4 PDF</strong>
+                  <span>Use this if your printer or region defaults to A4.</span>
+                </a>
+              </div>
+
+              <div className="pd-tip-list" role="list" aria-label="Printing and photo tips">
+                {PHOTO_TIPS.map((tip) => (
+                  <div key={tip} className="pd-tip-item" role="listitem">
+                    <CheckCircle2 size={16} />
+                    <span>{tip}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="pd-step-card pd-step-card-upload">
+              <div className="pd-step-badge">Step 2</div>
+              <div className="pd-step-header">
+                <div className="pd-step-icon">
+                  <Camera size={18} />
+                </div>
+                <div>
+                  <h3>Upload a photo</h3>
+                  <p>Use your own image, or try the sample.</p>
+                </div>
+              </div>
+
+              <div
+                className="pd-dropzone pd-dropzone-lg"
+                data-drag={dragging}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={onDrop}
+              >
+                <FileImage size={32} />
+                <strong>Drop a photo here or click to upload</strong>
+                <div className="pd-dropzone-hint">JPEG, PNG, or WebP.</div>
+                <div className="pd-row">
+                  <button
+                    type="button"
+                    className="pd-btn pd-btn-primary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    <Upload size={14} /> Upload photo
+                  </button>
+                  {FEATURED_SAMPLE ? (
+                    <button
+                      type="button"
+                      className="pd-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleSample(FEATURED_SAMPLE);
+                      }}
+                    >
+                      Try example
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <h3>Or try a synthetic example</h3>
+        <div
+          className="pd-sample-grid"
+          role="list"
+          aria-label="Synthetic samples"
+        >
           {SAMPLES.map((s) => (
             <button
               key={s.url}
               className="pd-sample-card"
               onClick={() => handleSample(s)}
               title={s.name}
+              role="listitem"
             >
               <img src={s.thumbUrl} alt={s.name} loading="lazy" />
               <span>{s.name}</span>
@@ -388,8 +494,8 @@ function ValidationBanner({
           </dl>
         ) : null}
         <div className="pd-validation-hints">
-          Try a sharper, evenly-lit photo with the full board visible and the
-          pattern piece on top.
+          Try a sharper, evenly-lit photo with the full paper visible beside
+          the pattern piece on the same flat surface.
         </div>
       </div>
     </div>

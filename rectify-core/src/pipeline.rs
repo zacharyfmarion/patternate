@@ -83,6 +83,7 @@ pub enum RectifyProgressStep {
     AssessQuality,
     RectifyImage,
     ExtractOutline,
+    FinalizeResults,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

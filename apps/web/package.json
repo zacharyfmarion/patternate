@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build:wasm": "wasm-pack build ../../rectify-wasm --target web --out-dir ../apps/web/src/wasm-pkg",
+    "build:wasm": "rm -rf src/wasm-pkg && wasm-pack build ../../rectify-wasm --target web --out-dir ../apps/web/src/wasm-pkg",
     "prebuild": "yarn build:wasm",
     "predev": "yarn build:wasm",
     "dev": "vite",

@@ -130,7 +130,8 @@ export type RectifyProgressStep =
   | 'detect_board'
   | 'assess_quality'
   | 'rectify_image'
-  | 'extract_outline';
+  | 'extract_outline'
+  | 'finalize_results';
 
 export type RectifyProgressStatus = 'running' | 'completed' | 'skipped' | 'failed';
 

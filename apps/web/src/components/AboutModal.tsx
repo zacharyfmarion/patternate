@@ -13,8 +13,8 @@ export function AboutModal() {
     >
       <p>
         Pattern Detector is a browser-first tool for extracting pattern piece
-        outlines from photographs of sewing patterns laid on a ChArUco
-        calibration board.
+        outlines from photographs of sewing patterns captured beside a
+        printable reference paper.
       </p>
       <p>
         The full detect → rectify → outline → export pipeline runs locally in

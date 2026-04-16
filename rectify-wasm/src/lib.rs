@@ -6,8 +6,9 @@
 
 use rectify_core::{
     BoardSpec, BoardSpecSource, DetectBoardOutcome, OutlineOptions, RectifyOptions, RectifyOutcome,
-    RectifyProgressEvent, builtin_board_spec_json, detect_board_in_memory, load_board_spec,
-    load_builtin_board_spec, rectify_in_memory, rectify_in_memory_with_progress,
+    RectifyProgressEvent, RectifyProgressStatus, RectifyProgressStep, builtin_board_spec_json,
+    detect_board_in_memory, load_board_spec, load_builtin_board_spec, rectify_in_memory,
+    rectify_in_memory_with_progress,
 };
 use js_sys::Function;
 use serde::Serialize;
@@ -62,14 +63,25 @@ pub fn rectify(
         RectifyOptions::default()
     };
 
-    let outcome = if let Some(callback) = on_progress {
+    let outcome = if let Some(callback) = on_progress.as_ref() {
         rectify_in_memory_with_progress(image_bytes, &spec, &options, |event| {
-            emit_progress(&callback, &event);
+            emit_progress(callback, &event);
         })
         .map_err(to_js_err)?
     } else {
         rectify_in_memory(image_bytes, &spec, &options).map_err(to_js_err)?
     };
+
+    if let Some(callback) = on_progress.as_ref() {
+        emit_progress(
+            callback,
+            &RectifyProgressEvent {
+                step: RectifyProgressStep::FinalizeResults,
+                status: RectifyProgressStatus::Running,
+                message: "Preparing results for display".to_string(),
+            },
+        );
+    }
 
     let payload = RectifyPayload::from_outcome(&outcome, &options);
     serde_wasm_bindgen::to_value(&payload).map_err(|e| JsError::new(&e.to_string()))

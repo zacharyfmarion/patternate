@@ -73,6 +73,7 @@ const RUN_PROGRESS_ORDER: RectifyProgressStep[] = [
   'assess_quality',
   'rectify_image',
   'extract_outline',
+  'finalize_results',
 ];
 
 const RUN_PROGRESS_LABELS: Record<RectifyProgressStep, string> = {
@@ -81,6 +82,7 @@ const RUN_PROGRESS_LABELS: Record<RectifyProgressStep, string> = {
   assess_quality: 'Check image quality',
   rectify_image: 'Rectify board plane',
   extract_outline: 'Extract pattern outline',
+  finalize_results: 'Show results',
 };
 
 // ---------------------------------------------------------------------------
@@ -131,6 +133,30 @@ function applyProgressEvent(
         }
       : item,
   );
+}
+
+function setProgressStep(
+  progress: RunProgressItem[],
+  step: RectifyProgressStep,
+  status: RunProgressItemStatus,
+  message: string,
+): RunProgressItem[] {
+  return progress.map((item) =>
+    item.step === step
+      ? {
+          ...item,
+          status,
+          message,
+        }
+      : item,
+  );
+}
+
+function failRunningStep(progress: RunProgressItem[], message: string): RunProgressItem[] {
+  const active = progress.find((item) => item.status === 'running');
+  return active
+    ? setProgressStep(progress, active.step, 'failed', message)
+    : progress;
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +263,16 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       const preparedUrl = pngBlobUrl(result.preparedPng);
       const rectifiedUrl = pngBlobUrl(result.rectifiedPng);
       const maskUrl = result.outline ? pngBlobUrl(result.outline.maskPng) : null;
+      const finalizedProgress = setProgressStep(
+        get().runProgress.length > 0 ? get().runProgress : createRunProgress(),
+        'finalize_results',
+        'completed',
+        result.qualityFailed
+          ? 'Loaded validation details'
+          : result.outline
+            ? 'Loaded rectified image and outline'
+            : 'Loaded rectified image',
+      );
 
       if (result.qualityFailed) {
         set({
@@ -246,6 +282,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
           preparedUrl,
           rectifiedUrl: null,
           maskUrl: null,
+          runProgress: finalizedProgress,
         });
         get().pushToast(
           'error',
@@ -260,6 +297,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
         preparedUrl,
         rectifiedUrl,
         maskUrl,
+        runProgress: finalizedProgress,
       });
       if (result.outline) {
         get().pushToast(
@@ -276,7 +314,14 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ runStatus: 'error', runError: message });
+      set((state) => ({
+        runStatus: 'error',
+        runError: message,
+        runProgress: failRunningStep(
+          state.runProgress.length > 0 ? state.runProgress : createRunProgress(),
+          message,
+        ),
+      }));
       get().pushToast('error', `Run failed: ${message}`);
     }
   },

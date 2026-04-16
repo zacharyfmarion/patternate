@@ -319,6 +319,153 @@ textarea {
   color: var(--fg-secondary);
 }
 
+.pd-onboarding {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.pd-onboarding-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.pd-step-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.pd-step-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pd-step-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.pd-step-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  flex-shrink: 0;
+}
+
+.pd-step-header h3 {
+  margin: 0 0 var(--space-1);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-primary);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.pd-step-header p {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.pd-board-downloads {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.pd-board-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.pd-board-card:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-primary));
+  transform: translateY(-1px);
+}
+
+.pd-board-card:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.pd-board-card img {
+  width: 100%;
+  aspect-ratio: 0.77;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-secondary) 92%, white 8%),
+      color-mix(in srgb, var(--bg-primary) 94%, transparent)
+    );
+}
+
+.pd-board-card strong {
+  font-size: 13px;
+  color: var(--fg-primary);
+}
+
+.pd-board-card span {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-secondary);
+}
+
+.pd-tip-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pd-tip-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-secondary);
+}
+
+.pd-tip-item svg {
+  color: var(--success);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 .pd-workspace-header {
   display: flex;
   align-items: flex-start;
@@ -553,15 +700,16 @@ textarea {
 }
 
 .pd-dropzone-lg {
-  padding: var(--space-8) var(--space-6);
+  padding: var(--space-6) var(--space-5);
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
 }
 
 .pd-dropzone-lg strong {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--fg-primary);
 }
 
@@ -569,6 +717,11 @@ textarea {
   max-width: 380px;
   color: var(--fg-muted);
   font-size: 12px;
+}
+
+.pd-step-card-upload .pd-dropzone-lg {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .pd-sample-grid {
@@ -613,6 +766,13 @@ textarea {
   font-size: 11px;
   text-align: left;
   color: var(--fg-primary);
+}
+
+@media (max-width: 980px) {
+  .pd-onboarding-grid,
+  .pd-board-downloads {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* -------------------------------------------------------------------------
@@ -694,6 +854,11 @@ textarea {
 }
 
 .pd-progress-step-icon {
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
   padding-top: 1px;
 }
 
@@ -873,12 +1038,16 @@ textarea {
  * -------------------------------------------------------------------------*/
 
 .pd-spinner {
+  display: inline-block;
+  flex: 0 0 auto;
   width: 24px;
   height: 24px;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   border: 2px solid var(--border-strong);
   border-top-color: var(--accent);
   animation: pd-spin 0.9s linear infinite;
+  vertical-align: middle;
 }
 
 .pd-spinner-sm {
