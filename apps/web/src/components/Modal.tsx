@@ -1,34 +1,49 @@
-import { useEffect, type PropsWithChildren } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { X } from 'lucide-react';
+import { type PropsWithChildren, type ReactNode } from 'react';
 
 interface Props {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   title: string;
+  description?: ReactNode;
+  footer?: ReactNode;
 }
 
-export function Modal({ open, onClose, title, children }: PropsWithChildren<Props>) {
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
+export function Modal({
+  open,
+  onOpenChange,
+  title,
+  description,
+  footer,
+  children,
+}: PropsWithChildren<Props>) {
   return (
-    <div className="pd-modal-backdrop" onClick={onClose}>
-      <div className="pd-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="pd-row-between">
-          <h2>{title}</h2>
-          <button className="pd-btn" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        <div className="pd-sep" />
-        {children}
-      </div>
-    </div>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="pd-dialog-overlay" />
+        <Dialog.Content className="pd-dialog-content">
+          <header className="pd-dialog-header">
+            <div className="pd-dialog-header-copy">
+              <Dialog.Title className="pd-dialog-title">{title}</Dialog.Title>
+              {description ? (
+                <Dialog.Description className="pd-dialog-description">
+                  {description}
+                </Dialog.Description>
+              ) : null}
+            </div>
+            <Dialog.Close asChild>
+              <button type="button" className="pd-dialog-close" title="Close" aria-label="Close">
+                <X size={18} />
+              </button>
+            </Dialog.Close>
+          </header>
+
+          <div className="pd-dialog-body">{children}</div>
+
+          {footer ? <footer className="pd-dialog-footer">{footer}</footer> : null}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

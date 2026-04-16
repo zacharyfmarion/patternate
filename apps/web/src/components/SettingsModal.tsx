@@ -31,6 +31,108 @@ export function SettingsModal() {
   }
 
   const activeLabel = TABS.find((t) => t.key === activeTab)!.label;
+  const isGeneralTab = activeTab === 'general';
+
+  const content = isGeneralTab ? (
+    <>
+      <SettingsCard>
+        <SettingsCardHeader
+          title="Pipeline"
+          description="Values used when you run detection and export outlines."
+        />
+        <SettingsCardSection>
+          <div className="pd-form-row">
+            <label htmlFor="pixelsPerMm">Pixels per mm</label>
+            <input
+              id="pixelsPerMm"
+              type="number"
+              min={1}
+              max={40}
+              step={0.5}
+              value={settings.pixelsPerMm}
+              onChange={(e) => set('pixelsPerMm', Number(e.target.value))}
+            />
+          </div>
+
+          <div className="pd-form-row">
+            <label htmlFor="simplifyMm">Simplify tolerance (mm)</label>
+            <input
+              id="simplifyMm"
+              type="number"
+              min={0}
+              max={5}
+              step={0.1}
+              value={settings.simplifyMm}
+              onChange={(e) => set('simplifyMm', Number(e.target.value))}
+            />
+          </div>
+
+          <div className="pd-form-row">
+            <label htmlFor="minPieceAreaMm2">Min piece area (mm²)</label>
+            <input
+              id="minPieceAreaMm2"
+              type="number"
+              min={0}
+              step={10}
+              value={settings.minPieceAreaMm2}
+              onChange={(e) => set('minPieceAreaMm2', Number(e.target.value))}
+            />
+          </div>
+
+          <div className="pd-form-row">
+            <label htmlFor="boardMarginMm">Board margin (mm, optional)</label>
+            <input
+              id="boardMarginMm"
+              type="number"
+              step={0.5}
+              value={settings.boardMarginMm ?? ''}
+              placeholder="default = board quiet zone"
+              onChange={(e) =>
+                set('boardMarginMm', e.target.value === '' ? null : Number(e.target.value))
+              }
+            />
+          </div>
+
+          <div className="pd-form-row">
+            <label htmlFor="boardSpec">Board spec</label>
+            <select
+              id="boardSpec"
+              value={settings.boardSpec}
+              onChange={(e) => set('boardSpec', e.target.value)}
+            >
+              <option value="refboard_v1">refboard_v1 (built-in)</option>
+            </select>
+          </div>
+
+          <div className="pd-form-row">
+            <label htmlFor="showOverlays">Show detection overlays</label>
+            <input
+              id="showOverlays"
+              type="checkbox"
+              checked={settings.showOverlays}
+              onChange={(e) => set('showOverlays', e.target.checked)}
+            />
+          </div>
+        </SettingsCardSection>
+      </SettingsCard>
+
+      <div className="pd-settings-dialog-actions">
+        <button type="button" className="pd-btn pd-btn-ghost" onClick={resetSettings}>
+          Reset pipeline to defaults
+        </button>
+      </div>
+    </>
+  ) : (
+    <SettingsCard data-testid="settings-theme-picker">
+      <SettingsCardHeader
+        title="Theme"
+        description="Choose a color theme for the entire application."
+      />
+      <SettingsCardSection>
+        <ThemePicker sections={availableThemes} value={currentThemeId} onChange={setTheme} />
+      </SettingsCardSection>
+    </SettingsCard>
+  );
 
   return (
     <Dialog.Root
@@ -40,164 +142,40 @@ export function SettingsModal() {
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="pd-settings-dialog-overlay" />
+        <Dialog.Overlay className="pd-dialog-overlay" />
         <Dialog.Content className="pd-settings-dialog-content" aria-describedby={undefined}>
-          <div className="pd-settings-dialog-shell">
-            <aside className="pd-settings-dialog-nav" aria-label="Settings sections">
-              <div className="pd-settings-dialog-nav-title">Settings</div>
-              {TABS.map((tab) => (
+          <aside className="pd-settings-dialog-nav" aria-label="Settings sections">
+            <div className="pd-settings-dialog-nav-title">Settings</div>
+            {TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                className="pd-settings-dialog-nav-item"
+                data-active={activeTab === tab.key ? 'true' : 'false'}
+                onClick={() => setActiveTab(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </aside>
+
+          <section className="pd-settings-dialog-panel">
+            <header className="pd-settings-dialog-header">
+              <Dialog.Title className="pd-settings-dialog-heading">{activeLabel}</Dialog.Title>
+              <Dialog.Close asChild>
                 <button
-                  key={tab.key}
                   type="button"
-                  className="pd-settings-dialog-nav-item"
-                  data-active={activeTab === tab.key ? 'true' : 'false'}
-                  onClick={() => setActiveTab(tab.key)}
+                  className="pd-dialog-close"
+                  title="Close"
+                  aria-label="Close settings"
                 >
-                  {tab.label}
+                  <X size={18} />
                 </button>
-              ))}
-            </aside>
+              </Dialog.Close>
+            </header>
 
-            <div className="pd-settings-dialog-main">
-              <header className="pd-settings-dialog-header">
-                <Dialog.Title className="pd-settings-dialog-heading">{activeLabel}</Dialog.Title>
-                <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    className="pd-settings-dialog-close"
-                    title="Close"
-                    aria-label="Close settings"
-                  >
-                    <X size={18} />
-                  </button>
-                </Dialog.Close>
-              </header>
-
-              <div className="pd-settings-dialog-scroll">
-                {activeTab === 'general' ? (
-                  <>
-                    <SettingsCard>
-                      <SettingsCardHeader
-                        title="Pipeline"
-                        description="Values used when you run detection and export outlines."
-                      />
-                      <SettingsCardSection>
-                        <div className="pd-form-row">
-                          <label htmlFor="pixelsPerMm">Pixels per mm</label>
-                          <input
-                            id="pixelsPerMm"
-                            type="number"
-                            min={1}
-                            max={40}
-                            step={0.5}
-                            value={settings.pixelsPerMm}
-                            onChange={(e) => set('pixelsPerMm', Number(e.target.value))}
-                          />
-                        </div>
-
-                        <div className="pd-form-row">
-                          <label htmlFor="simplifyMm">Simplify tolerance (mm)</label>
-                          <input
-                            id="simplifyMm"
-                            type="number"
-                            min={0}
-                            max={5}
-                            step={0.1}
-                            value={settings.simplifyMm}
-                            onChange={(e) => set('simplifyMm', Number(e.target.value))}
-                          />
-                        </div>
-
-                        <div className="pd-form-row">
-                          <label htmlFor="minPieceAreaMm2">Min piece area (mm²)</label>
-                          <input
-                            id="minPieceAreaMm2"
-                            type="number"
-                            min={0}
-                            step={10}
-                            value={settings.minPieceAreaMm2}
-                            onChange={(e) => set('minPieceAreaMm2', Number(e.target.value))}
-                          />
-                        </div>
-
-                        <div className="pd-form-row">
-                          <label htmlFor="boardMarginMm">Board margin (mm, optional)</label>
-                          <input
-                            id="boardMarginMm"
-                            type="number"
-                            step={0.5}
-                            value={settings.boardMarginMm ?? ''}
-                            placeholder="default = board quiet zone"
-                            onChange={(e) =>
-                              set(
-                                'boardMarginMm',
-                                e.target.value === '' ? null : Number(e.target.value),
-                              )
-                            }
-                          />
-                        </div>
-
-                        <div className="pd-form-row">
-                          <label htmlFor="boardSpec">Board spec</label>
-                          <select
-                            id="boardSpec"
-                            value={settings.boardSpec}
-                            onChange={(e) => set('boardSpec', e.target.value)}
-                          >
-                            <option value="refboard_v1">refboard_v1 (built-in)</option>
-                          </select>
-                        </div>
-
-                        <div className="pd-form-row">
-                          <label htmlFor="showOverlays">Show detection overlays</label>
-                          <input
-                            id="showOverlays"
-                            type="checkbox"
-                            checked={settings.showOverlays}
-                            onChange={(e) => set('showOverlays', e.target.checked)}
-                          />
-                        </div>
-                      </SettingsCardSection>
-                    </SettingsCard>
-
-                    <div className="pd-settings-dialog-footer">
-                      <button type="button" className="pd-btn pd-btn-ghost" onClick={resetSettings}>
-                        Reset pipeline to defaults
-                      </button>
-                      <Dialog.Close asChild>
-                        <button type="button" className="pd-btn pd-btn-primary">
-                          Done
-                        </button>
-                      </Dialog.Close>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <SettingsCard data-testid="settings-theme-picker">
-                      <SettingsCardHeader
-                        title="Theme"
-                        description="Choose a color theme for the entire application."
-                      />
-                      <SettingsCardSection>
-                        <ThemePicker
-                          sections={availableThemes}
-                          value={currentThemeId}
-                          onChange={setTheme}
-                        />
-                      </SettingsCardSection>
-                    </SettingsCard>
-                    <div className="pd-settings-dialog-footer pd-settings-dialog-footer-end">
-                      <Dialog.Close asChild>
-                        <button type="button" className="pd-btn pd-btn-primary">
-                          Done
-                        </button>
-                      </Dialog.Close>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+            <div className="pd-settings-dialog-body">{content}</div>
+          </section>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

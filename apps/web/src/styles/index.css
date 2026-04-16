@@ -823,7 +823,7 @@ textarea {
  * Settings dialog (Radix Dialog — Cascade-style split layout)
  * -------------------------------------------------------------------------*/
 
-.pd-settings-dialog-overlay {
+.pd-dialog-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
@@ -834,14 +834,14 @@ textarea {
 
 .pd-settings-dialog-content {
   position: fixed;
-  left: 50%;
-  top: 50%;
+  inset: var(--space-4);
+  margin: auto;
   z-index: 1001;
-  transform: translate(-50%, -50%);
   box-sizing: border-box;
-  width: min(640px, calc(100vw - var(--space-8)));
-  height: min(520px, calc(100vh - var(--space-8)));
-  max-height: 90vh;
+  width: min(720px, calc(100vw - var(--space-8)));
+  max-width: calc(100vw - var(--space-8));
+  height: min(560px, calc(100dvh - var(--space-8)));
+  max-height: calc(100dvh - var(--space-8));
   padding: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -850,10 +850,8 @@ textarea {
   box-shadow: var(--shadow-lg);
   outline: none;
   animation: pd-modal-in var(--duration-base) var(--ease-out);
-  /* Flex column + overflow hidden so the main pane can shrink and scroll internally. */
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -861,22 +859,13 @@ textarea {
   outline: none;
 }
 
-.pd-settings-dialog-shell {
-  display: flex;
-  flex: 1 1 0;
-  min-height: 0;
-  overflow: hidden;
-  border-radius: inherit;
-}
-
 .pd-settings-dialog-nav {
-  width: 168px;
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   padding: var(--space-4) 0;
   background: var(--bg-primary);
   border-right: 1px solid var(--border-subtle);
+  min-height: 0;
 }
 
 .pd-settings-dialog-nav-title {
@@ -923,19 +912,16 @@ textarea {
   outline-offset: -2px;
 }
 
-.pd-settings-dialog-main {
-  flex: 1 1 0;
+.pd-settings-dialog-panel {
   min-width: 0;
   min-height: 0;
-  align-self: stretch;
-  height: 100%;
-  /* Grid + minmax(0,1fr) fixes flex min-height:auto so the pane can shrink and scroll. */
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .pd-settings-dialog-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -951,7 +937,7 @@ textarea {
   color: var(--fg-primary);
 }
 
-.pd-settings-dialog-close {
+.pd-dialog-close {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -967,21 +953,21 @@ textarea {
     color var(--duration-fast) var(--ease-out);
 }
 
-.pd-settings-dialog-close:hover {
+.pd-dialog-close:hover {
   background: var(--bg-hover);
   color: var(--fg-primary);
 }
 
-.pd-settings-dialog-close:focus-visible {
+.pd-dialog-close:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
 }
 
-.pd-settings-dialog-scroll {
+.pd-settings-dialog-body {
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  height: 100%;
-  max-height: 100%;
+  height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -992,55 +978,88 @@ textarea {
   -webkit-overflow-scrolling: touch;
 }
 
-.pd-settings-dialog-footer {
+.pd-settings-dialog-actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-dialog-footer-gap);
-  margin-top: auto;
-  padding-top: var(--space-3);
-}
-
-.pd-settings-dialog-footer-end {
-  justify-content: flex-end;
+  padding-top: var(--space-2);
 }
 
 /* -------------------------------------------------------------------------
  * Modals (simple — About, Shortcuts)
  * -------------------------------------------------------------------------*/
 
-.pd-modal-backdrop {
+.pd-dialog-content {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: grid;
-  place-items: center;
-  z-index: 1000;
-  animation: pd-fade-in var(--duration-base) var(--ease-out);
-}
-
-.pd-modal {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1001;
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  min-width: 480px;
-  max-width: 680px;
-  max-height: 85vh;
-  overflow: auto;
-  padding: var(--space-dialog-padding-y) var(--space-dialog-padding-x);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  width: min(560px, calc(100vw - var(--space-8)));
+  max-width: calc(100vw - var(--space-8));
+  max-height: calc(100dvh - var(--space-8));
   display: flex;
   flex-direction: column;
-  gap: var(--space-section-gap);
+  overflow: hidden;
   color: var(--fg-primary);
   box-shadow: var(--shadow-lg);
-  animation: pd-modal-in var(--duration-base) var(--ease-out);
+  outline: none;
+  animation: pd-modal-in-centered var(--duration-base) var(--ease-out);
 }
 
-.pd-modal h2 {
+.pd-dialog-content:focus {
+  outline: none;
+}
+
+.pd-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pd-dialog-header-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.pd-dialog-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--fg-primary);
+}
+
+.pd-dialog-description {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-secondary);
+}
+
+.pd-dialog-body {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  -webkit-overflow-scrolling: touch;
+}
+
+.pd-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-dialog-footer-gap);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .pd-form-row {
@@ -1095,6 +1114,11 @@ textarea {
 @keyframes pd-modal-in {
   from { opacity: 0; transform: translateY(4px) scale(0.98); }
   to { opacity: 1; transform: none; }
+}
+
+@keyframes pd-modal-in-centered {
+  from { opacity: 0; transform: translate(-50%, -50%) translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, -50%) translateY(0) scale(1); }
 }
 
 /* -------------------------------------------------------------------------

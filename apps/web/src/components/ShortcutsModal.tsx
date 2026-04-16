@@ -11,7 +11,13 @@ const SHORTCUTS: Array<[string, string]> = [
 export function ShortcutsModal() {
   const { shortcutsOpen, closeShortcuts } = useSettingsStore();
   return (
-    <Modal open={shortcutsOpen} onClose={closeShortcuts} title="Keyboard Shortcuts">
+    <Modal
+      open={shortcutsOpen}
+      onOpenChange={(open) => {
+        if (!open) closeShortcuts();
+      }}
+      title="Keyboard Shortcuts"
+    >
       <dl className="pd-kv">
         {SHORTCUTS.map(([k, v]) => (
           <div key={k} style={{ display: 'contents' }}>
