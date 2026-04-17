@@ -10,6 +10,7 @@ import {
 
 import { useEditStore } from '../store/editStore';
 import { usePipelineStore } from '../store/pipelineStore';
+import { Button, IconButton } from '../components/ui';
 
 export function EditToolbar() {
   const activeTool = useEditStore((s) => s.activeTool);
@@ -38,70 +39,86 @@ export function EditToolbar() {
 
       <div className="pd-edit-toolbar-controls">
         <div className="pd-edit-toolgroup" role="group" aria-label="Tools">
-          <button
-            className="pd-iconbtn"
-            data-active={activeTool === 'select'}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            isActive={activeTool === 'select'}
+            className="gap-1.5"
             onClick={() => setTool('select')}
             title="Select (V)"
           >
             <MousePointer2 size={14} /> Select
-          </button>
-          <button
-            className="pd-iconbtn"
-            data-active={activeTool === 'pen'}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            isActive={activeTool === 'pen'}
+            className="gap-1.5"
             onClick={() => setTool('pen')}
             title="Pen (P) — click a segment to insert a node"
           >
             <PenTool size={14} /> Pen
-          </button>
+          </Button>
         </div>
 
         <div className="pd-edit-toolgroup" role="group" aria-label="Refine">
-          <button
-            className="pd-iconbtn"
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
             onClick={() => polygon && autoSmooth(polygon, 0.5)}
             disabled={!polygon}
             title="Auto-smooth from original polygon"
           >
             <Sparkles size={14} /> Auto-smooth
-          </button>
-          <button
-            className="pd-iconbtn"
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
             onClick={() => polygon && resetFromPolygon(polygon)}
             disabled={!polygon}
             title="Reset to original polygon"
           >
             <RefreshCw size={14} /> Reset
-          </button>
+          </Button>
         </div>
 
-        <div className="pd-edit-toolgroup pd-edit-toolgroup-compact" role="group" aria-label="History">
-          <button
-            className="pd-iconbtn"
+        <div className="pd-edit-toolgroup" role="group" aria-label="History">
+          <IconButton
+            size="sm"
             onClick={undo}
             disabled={!canUndo}
             title="Undo (Cmd+Z)"
+            aria-label="Undo"
           >
             <Undo2 size={14} />
-          </button>
-          <button
-            className="pd-iconbtn"
+          </IconButton>
+          <IconButton
+            size="sm"
             onClick={redo}
             disabled={!canRedo}
             title="Redo (Cmd+Shift+Z)"
+            aria-label="Redo"
           >
             <Redo2 size={14} />
-          </button>
+          </IconButton>
         </div>
       </div>
 
-      <button
-        className="pd-btn pd-btn-primary"
+      <Button
+        type="button"
+        variant="primary"
+        className="gap-1.5"
         onClick={exitEdit}
         title="Exit edit mode (keeps edits)"
       >
         <Check size={14} /> Done
-      </button>
+      </Button>
     </div>
   );
 }

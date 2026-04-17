@@ -1,4 +1,5 @@
-import { defineConfig, type PluginOption } from 'vite';
+import { defineConfig } from 'vitest/config';
+import type { PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
@@ -95,5 +96,13 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['rectify-wasm'],
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    css: true,
+    clearMocks: true,
+    restoreMocks: true,
   },
 });

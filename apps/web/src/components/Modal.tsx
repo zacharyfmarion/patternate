@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { type PropsWithChildren, type ReactNode } from 'react';
+import { IconButton } from './ui';
 
 interface Props {
   open: boolean;
@@ -33,9 +34,9 @@ export function Modal({
               ) : null}
             </div>
             <Dialog.Close asChild>
-              <button type="button" className="pd-dialog-close" title="Close" aria-label="Close">
+              <IconButton size="sm" title="Close" aria-label="Close">
                 <X size={18} />
-              </button>
+              </IconButton>
             </Dialog.Close>
           </header>
 

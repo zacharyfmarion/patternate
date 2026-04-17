@@ -14,6 +14,8 @@ import {
 import { usePipelineStore } from '../store/pipelineStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useEditStore } from '../store/editStore';
+import { useWorkspacePrefsStore, type WelcomeMode } from '../store/workspacePrefsStore';
+import { Button } from '../components/ui';
 import { EditOverlay, useEditKeyboardShortcuts } from './EditOverlay';
 import { EditToolbar } from './EditToolbar';
 import type { BoardDetectionDebug, RectifyResult } from '../engine/types';
@@ -54,6 +56,13 @@ const SAMPLES: Sample[] = Object.entries(SAMPLE_PNG_MAP)
 const FEATURED_SAMPLE =
   SAMPLES.find((sample) => sample.name === 'dark_on_light') ?? SAMPLES[0] ?? null;
 
+const VISIBLE_SAMPLES = FEATURED_SAMPLE
+  ? [
+      FEATURED_SAMPLE,
+      ...SAMPLES.filter((sample) => sample.name !== FEATURED_SAMPLE.name).slice(0, 3),
+    ]
+  : SAMPLES.slice(0, 4);
+
 const PHOTO_TIPS = [
   'Print the paper at 100% scale and keep it flat on a table or floor.',
   'Keep the whole paper visible with a little margin around the edges.',
@@ -62,6 +71,8 @@ const PHOTO_TIPS = [
   'Hold the camera steady and avoid blur, glare, hard shadows, or folds in the paper.',
   'Frame both the printed paper and the pattern piece in the same photo.',
 ] as const;
+
+type WelcomeStep = 'reference' | 'photo' | 'upload';
 
 // ---------------------------------------------------------------------------
 // Overlay renderers
@@ -126,6 +137,377 @@ function drawDetectionOverlay(
   }
 }
 
+function formatSampleName(name: string) {
+  return name.replace(/_/g, ' ');
+}
+
+function ReferenceDownloads({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`pd-board-downloads${compact ? ' pd-board-downloads-compact' : ''}`}>
+      <a className="pd-board-card" href={refboardLetterPdfUrl} download>
+        <img src={refboardLetterPreviewUrl} alt="Printable reference paper, US Letter" />
+        <strong>US Letter PDF</strong>
+      </a>
+      <a className="pd-board-card" href={refboardA4PdfUrl} download>
+        <img src={refboardA4PreviewUrl} alt="Printable reference paper, A4" />
+        <strong>A4 PDF</strong>
+      </a>
+    </div>
+  );
+}
+
+function WelcomeSamples({
+  title,
+  samples,
+  onSample,
+}: {
+  title: string;
+  samples: Sample[];
+  onSample: (sample: Sample) => void;
+}) {
+  return (
+    <section className="pd-welcome-section">
+      <div className="pd-welcome-section-header">
+        <div>
+          <h3 className="pd-welcome-section-title">{title}</h3>
+          <p className="pd-welcome-section-copy">Load a known-good image without leaving the empty state.</p>
+        </div>
+      </div>
+      <div className="pd-sample-grid pd-sample-grid-compact" role="list" aria-label={title}>
+        {samples.map((sample) => (
+          <button
+            key={sample.url}
+            className="pd-sample-card pd-sample-card-compact"
+            onClick={() => onSample(sample)}
+            title={formatSampleName(sample.name)}
+            role="listitem"
+            type="button"
+          >
+            <img src={sample.thumbUrl} alt={formatSampleName(sample.name)} loading="lazy" />
+            <span>{formatSampleName(sample.name)}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function UploadDropzone({
+  dragging,
+  fileInputRef,
+  onFeaturedSample,
+}: {
+  dragging: boolean;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onFeaturedSample: (() => void) | null;
+}) {
+  return (
+    <div
+      className="pd-dropzone pd-dropzone-lg pd-dropzone-hero"
+      data-drag={dragging}
+      onClick={() => fileInputRef.current?.click()}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          fileInputRef.current?.click();
+        }
+      }}
+    >
+      <FileImage size={32} />
+      <strong>Drop a photo here or click to upload</strong>
+      <div className="pd-dropzone-hint">
+        JPEG, PNG, or WebP. Processing starts immediately after upload.
+      </div>
+      <div className="pd-row">
+        <Button
+          type="button"
+          variant="primary"
+          className="gap-1.5"
+          onClick={(e) => {
+            e.stopPropagation();
+            fileInputRef.current?.click();
+          }}
+        >
+          <Upload size={14} /> Upload photo
+        </Button>
+        {onFeaturedSample ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFeaturedSample();
+            }}
+          >
+            Try example
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function GuidedWelcome({
+  dragging,
+  fileInputRef,
+  onSample,
+  onSkipGuided,
+}: {
+  dragging: boolean;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onSample: (sample: Sample) => void;
+  onSkipGuided: () => void;
+}) {
+  const [currentStep, setCurrentStep] = useState<WelcomeStep>('reference');
+
+  const stepOrder: WelcomeStep[] = ['reference', 'photo', 'upload'];
+  const currentIndex = stepOrder.indexOf(currentStep);
+
+  function renderStepAction(step: WelcomeStep, index: number) {
+    if (currentStep === step || index > currentIndex) return null;
+    return (
+      <Button type="button" variant="ghost" onClick={() => setCurrentStep(step)}>
+        Review step
+      </Button>
+    );
+  }
+
+  return (
+    <section className="pd-welcome-flow">
+      <div className="pd-welcome-header">
+        <div>
+          <div className="pd-welcome-eyebrow">Guided Setup</div>
+          <h2 className="pd-welcome-title">Go one step at a time, or drop a photo anytime.</h2>
+          <p className="pd-welcome-copy">
+            The quickest successful run is: print the reference paper, frame it beside the
+            pattern piece, then upload the photo.
+          </p>
+        </div>
+        <Button type="button" variant="ghost" onClick={onSkipGuided}>
+          Skip guided setup
+        </Button>
+      </div>
+
+      <section
+        className="pd-welcome-step"
+        data-step-state={currentStep === 'reference' ? 'current' : currentIndex > 0 ? 'complete' : 'upcoming'}
+      >
+        <div className="pd-welcome-step-top">
+          <div className="pd-step-badge">Step 1</div>
+          {renderStepAction('reference', 0)}
+        </div>
+        <div className="pd-step-header">
+          <div className="pd-step-icon">
+            <Download size={18} />
+          </div>
+          <div>
+            <h3>Get the reference paper</h3>
+          </div>
+        </div>
+        {currentStep === 'reference' ? (
+          <div className="pd-welcome-step-body">
+            <ReferenceDownloads />
+            <div className="pd-row">
+              <Button type="button" variant="primary" onClick={() => setCurrentStep('photo')}>
+                I have it printed out
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section
+        className="pd-welcome-step"
+        data-step-state={currentStep === 'photo' ? 'current' : currentIndex > 1 ? 'complete' : 'upcoming'}
+      >
+        <div className="pd-welcome-step-top">
+          <div className="pd-step-badge">Step 2</div>
+          {renderStepAction('photo', 1)}
+        </div>
+        <div className="pd-step-header">
+          <div className="pd-step-icon">
+            <Camera size={18} />
+          </div>
+          <div>
+            <h3>Take the photo</h3>
+          </div>
+        </div>
+        {currentStep === 'photo' ? (
+          <div className="pd-welcome-step-body">
+            <div className="pd-tip-list" role="list" aria-label="Photo tips">
+              {PHOTO_TIPS.map((tip) => (
+                <div key={tip} className="pd-tip-item" role="listitem">
+                  <CheckCircle2 size={16} />
+                  <span>{tip}</span>
+                </div>
+              ))}
+            </div>
+            <div className="pd-row">
+              <Button type="button" variant="primary" onClick={() => setCurrentStep('upload')}>
+                I&apos;m ready to upload
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="pd-welcome-step" data-step-state={currentStep === 'upload' ? 'current' : 'upcoming'}>
+        <div className="pd-welcome-step-top">
+          <div className="pd-step-badge">Step 3</div>
+          {renderStepAction('upload', 2)}
+        </div>
+        <div className="pd-step-header">
+          <div className="pd-step-icon">
+            <Upload size={18} />
+          </div>
+          <div>
+            <h3>Upload the photo</h3>
+          </div>
+        </div>
+        {currentStep === 'upload' ? (
+          <div className="pd-welcome-step-body">
+            <UploadDropzone
+              dragging={dragging}
+              fileInputRef={fileInputRef}
+              onFeaturedSample={FEATURED_SAMPLE ? () => onSample(FEATURED_SAMPLE) : null}
+            />
+            <WelcomeSamples title="Synthetic examples" samples={VISIBLE_SAMPLES} onSample={onSample} />
+          </div>
+        ) : null}
+      </section>
+    </section>
+  );
+}
+
+function StreamlinedWelcome({
+  dragging,
+  fileInputRef,
+  onSample,
+  onShowGuide,
+}: {
+  dragging: boolean;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onSample: (sample: Sample) => void;
+  onShowGuide: () => void;
+}) {
+  const [showDownloads, setShowDownloads] = useState(false);
+
+  return (
+    <section className="pd-welcome-flow pd-welcome-flow-streamlined">
+      <div className="pd-welcome-header">
+        <div>
+          <div className="pd-welcome-eyebrow">Quick Start</div>
+          <h2 className="pd-welcome-title">Drop in a photo and let the app run.</h2>
+          <p className="pd-welcome-copy">
+            If you already know the setup, this is the fast path. You can always reopen the guide
+            if you want the step-by-step version again.
+          </p>
+        </div>
+        <div className="pd-row">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setShowDownloads((value) => !value)}
+          >
+            {showDownloads ? 'Hide reference paper' : 'Need the reference paper?'}
+          </Button>
+          <Button type="button" variant="ghost" onClick={onShowGuide}>
+            Show setup guide
+          </Button>
+        </div>
+      </div>
+
+      {showDownloads ? (
+        <section className="pd-welcome-section">
+          <div className="pd-welcome-section-header">
+            <div>
+              <h3 className="pd-welcome-section-title">Reference paper downloads</h3>
+              <p className="pd-welcome-section-copy">
+                Print at 100% scale and keep the full page visible in the photo.
+              </p>
+            </div>
+          </div>
+          <ReferenceDownloads compact />
+        </section>
+      ) : null}
+
+      <UploadDropzone
+        dragging={dragging}
+        fileInputRef={fileInputRef}
+        onFeaturedSample={FEATURED_SAMPLE ? () => onSample(FEATURED_SAMPLE) : null}
+      />
+
+      <WelcomeSamples title="Synthetic examples" samples={VISIBLE_SAMPLES} onSample={onSample} />
+    </section>
+  );
+}
+
+function WelcomeEmptyState({
+  welcomeMode,
+  dragging,
+  fileInputRef,
+  onFileDrop,
+  onSample,
+  onShowGuide,
+  onSkipGuided,
+  setDragging,
+}: {
+  welcomeMode: WelcomeMode;
+  dragging: boolean;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onFileDrop: (file: File) => void;
+  onSample: (sample: Sample) => void;
+  onShowGuide: () => void;
+  onSkipGuided: () => void;
+  setDragging: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      void onFileDrop(file);
+    }
+  }
+
+  function onDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    const nextTarget = e.relatedTarget;
+    if (!(nextTarget instanceof Node) || !e.currentTarget.contains(nextTarget)) {
+      setDragging(false);
+    }
+  }
+
+  return (
+    <div
+      className="pd-panel"
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragging) setDragging(true);
+      }}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {welcomeMode === 'guided' ? (
+        <GuidedWelcome
+          dragging={dragging}
+          fileInputRef={fileInputRef}
+          onSample={onSample}
+          onSkipGuided={onSkipGuided}
+        />
+      ) : (
+        <StreamlinedWelcome
+          dragging={dragging}
+          fileInputRef={fileInputRef}
+          onSample={onSample}
+          onShowGuide={onShowGuide}
+        />
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
@@ -142,6 +524,9 @@ export function WorkspacePanel() {
   const run = usePipelineStore((s) => s.run);
   const pushToast = usePipelineStore((s) => s.pushToast);
   const showOverlays = useSettingsStore((s) => s.settings.showOverlays);
+  const welcomeMode = useWorkspacePrefsStore((s) => s.welcomeMode);
+  const showGuidedWelcome = useWorkspacePrefsStore((s) => s.showGuidedWelcome);
+  const showStreamlinedWelcome = useWorkspacePrefsStore((s) => s.showStreamlinedWelcome);
 
   const editMode = useEditStore((s) => s.editMode);
   const enterEdit = useEditStore((s) => s.enterEdit);
@@ -201,39 +586,48 @@ export function WorkspacePanel() {
     };
   }, [editMode, outlineMeta, runError, runStatus]);
 
-  async function handleFile(file: File) {
+  async function loadInput(
+    name: string,
+    bytes: Uint8Array,
+    {
+      autoRun = false,
+      loadedMessage = `Loaded ${name}`,
+    }: { autoRun?: boolean; loadedMessage?: string } = {},
+  ) {
+    setInput(name, bytes);
+    pushToast('info', loadedMessage);
+    if (autoRun) {
+      await run();
+    }
+  }
+
+  async function handleFile(file: File, { autoRun = false }: { autoRun?: boolean } = {}) {
     try {
       const arrayBuf = await file.arrayBuffer();
-      setInput(file.name, new Uint8Array(arrayBuf));
-      pushToast('info', `Loaded ${file.name}`);
+      await loadInput(file.name, new Uint8Array(arrayBuf), { autoRun });
     } catch (err) {
       pushToast('error', `Failed to load ${file.name}: ${String(err)}`);
     }
   }
 
-  async function handleSample(sample: Sample) {
+  async function handleSample(sample: Sample, { autoRun = false }: { autoRun?: boolean } = {}) {
     try {
       const res = await fetch(sample.url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const arrayBuf = await res.arrayBuffer();
-      setInput(`${sample.name}.png`, new Uint8Array(arrayBuf));
-      pushToast('info', `Loaded sample: ${sample.name}`);
+      await loadInput(`${sample.name}.png`, new Uint8Array(arrayBuf), {
+        autoRun,
+        loadedMessage: `Loaded sample: ${sample.name}`,
+      });
     } catch (err) {
       pushToast('error', `Failed to load sample: ${String(err)}`);
     }
   }
 
-  function onDrop(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setDragging(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) handleFile(f);
-  }
-
   // ---------- STATE: no file loaded ----------
   if (!fileName) {
     return (
-      <div className="pd-panel">
+      <>
         <input
           ref={fileInputRef}
           type="file"
@@ -241,123 +635,22 @@ export function WorkspacePanel() {
           style={{ display: 'none' }}
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) handleFile(f);
+            if (f) void handleFile(f, { autoRun: true });
             e.currentTarget.value = '';
           }}
         />
 
-        <section className="pd-onboarding">
-          <div className="pd-onboarding-grid">
-            <section className="pd-step-card">
-              <div className="pd-step-badge">Step 1</div>
-              <div className="pd-step-header">
-                <div className="pd-step-icon">
-                  <Download size={18} />
-                </div>
-                <div>
-                  <h3>Print the reference paper</h3>
-                  <p>Download the PDF that matches your paper size.</p>
-                </div>
-              </div>
-
-              <div className="pd-board-downloads">
-                <a className="pd-board-card" href={refboardLetterPdfUrl} download>
-                  <img src={refboardLetterPreviewUrl} alt="Printable reference paper, US Letter" />
-                  <strong>US Letter PDF</strong>
-                  <span>Best for standard printers in the U.S.</span>
-                </a>
-                <a className="pd-board-card" href={refboardA4PdfUrl} download>
-                  <img src={refboardA4PreviewUrl} alt="Printable reference paper, A4" />
-                  <strong>A4 PDF</strong>
-                  <span>Use this if your printer or region defaults to A4.</span>
-                </a>
-              </div>
-
-              <div className="pd-tip-list" role="list" aria-label="Printing and photo tips">
-                {PHOTO_TIPS.map((tip) => (
-                  <div key={tip} className="pd-tip-item" role="listitem">
-                    <CheckCircle2 size={16} />
-                    <span>{tip}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="pd-step-card pd-step-card-upload">
-              <div className="pd-step-badge">Step 2</div>
-              <div className="pd-step-header">
-                <div className="pd-step-icon">
-                  <Camera size={18} />
-                </div>
-                <div>
-                  <h3>Upload a photo</h3>
-                  <p>Use your own image, or try the sample.</p>
-                </div>
-              </div>
-
-              <div
-                className="pd-dropzone pd-dropzone-lg"
-                data-drag={dragging}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragging(true);
-                }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={onDrop}
-              >
-                <FileImage size={32} />
-                <strong>Drop a photo here or click to upload</strong>
-                <div className="pd-dropzone-hint">JPEG, PNG, or WebP.</div>
-                <div className="pd-row">
-                  <button
-                    type="button"
-                    className="pd-btn pd-btn-primary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    <Upload size={14} /> Upload photo
-                  </button>
-                  {FEATURED_SAMPLE ? (
-                    <button
-                      type="button"
-                      className="pd-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleSample(FEATURED_SAMPLE);
-                      }}
-                    >
-                      Try example
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-          </div>
-        </section>
-
-        <h3>Or try a synthetic example</h3>
-        <div
-          className="pd-sample-grid"
-          role="list"
-          aria-label="Synthetic samples"
-        >
-          {SAMPLES.map((s) => (
-            <button
-              key={s.url}
-              className="pd-sample-card"
-              onClick={() => handleSample(s)}
-              title={s.name}
-              role="listitem"
-            >
-              <img src={s.thumbUrl} alt={s.name} loading="lazy" />
-              <span>{s.name}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+        <WelcomeEmptyState
+          welcomeMode={welcomeMode}
+          dragging={dragging}
+          fileInputRef={fileInputRef}
+          onFileDrop={(file) => handleFile(file, { autoRun: true })}
+          onSample={(sample) => void handleSample(sample, { autoRun: true })}
+          onShowGuide={showGuidedWelcome}
+          onSkipGuided={showStreamlinedWelcome}
+          setDragging={setDragging}
+        />
+      </>
     );
   }
 
@@ -371,7 +664,7 @@ export function WorkspacePanel() {
         style={{ display: 'none' }}
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) handleFile(f);
+          if (f) void handleFile(f);
           e.currentTarget.value = '';
         }}
       />
@@ -388,31 +681,38 @@ export function WorkspacePanel() {
             </span>
           </div>
           <p className="pd-workspace-summary">{workspaceState.summary}</p>
-          <button
-            className="pd-workspace-link"
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="self-start gap-1.5 !px-0 text-xs font-semibold"
             onClick={() => fileInputRef.current?.click()}
             title="Replace the current image"
           >
             <Upload size={14} /> Replace image
-          </button>
+          </Button>
         </div>
 
         <div className="pd-workspace-header-actions">
           {runStatus === 'success' && result?.outline && !editMode ? (
-            <button
-              className="pd-btn"
+            <Button
+              type="button"
+              variant="secondary"
+              className="gap-1.5"
               onClick={() => result.outline && enterEdit(result.outline.polygonMm)}
               title="Edit the outline as spline curves"
             >
               <Pencil size={14} /> Edit curve
-            </button>
+            </Button>
           ) : null}
-          <button
-            className="pd-btn pd-btn-primary pd-btn-run"
+          <Button
+            type="button"
+            variant="primary"
+            className="gap-2 px-4 font-semibold"
             disabled={runStatus === 'running'}
             onClick={() => run()}
           >
-            <span className="pd-btn-icon" aria-hidden="true">
+            <span aria-hidden="true">
               {runStatus === 'running' ? (
                 <span className="pd-spinner pd-spinner-sm" />
               ) : runStatus === 'idle' ? (
@@ -428,7 +728,7 @@ export function WorkspacePanel() {
                   ? 'Run'
                 : 'Re-run'}
             </span>
-          </button>
+          </Button>
         </div>
       </section>
 

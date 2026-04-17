@@ -17,6 +17,7 @@ import { useLayoutStore } from './store/layoutStore';
 import { useThemeStore } from './store/themeStore';
 import { useSettingsStore } from './store/settingsStore';
 import { usePipelineStore } from './store/pipelineStore';
+import { Button, IconButton, TooltipProvider } from './components/ui';
 
 function WorkspaceSwitch(_props: IDockviewPanelProps) {
   return <WorkspacePanel />;
@@ -78,50 +79,71 @@ export function App() {
   }, [openSettings, openShortcuts, toggleLog, run, fileBytes, runStatus]);
 
   return (
-    <div className="pd-app">
-      <header className="pd-topbar">
-        <h1>Pattern Detector</h1>
-        <span className="pd-spacer" />
-        <div className="pd-topbar-actions" role="toolbar" aria-label="App actions">
-          <button onClick={toggleLog} title="Toggle log (Cmd+`)">
-            <Terminal size={14} /> Log
-          </button>
-          <button onClick={openShortcuts} title="Shortcuts (Cmd+/)">
-            <Keyboard size={14} />
-          </button>
-          <button onClick={openAbout} title="About">
-            <Info size={14} />
-          </button>
-          <button onClick={openSettings} title="Settings (Cmd+,)">
-            <SettingsIcon size={14} />
-          </button>
-          <button
-            onClick={toggleLightDark}
-            title={
-              currentTheme.type === 'dark'
-                ? 'Switch to light theme (open Settings for more)'
-                : 'Switch to dark theme (open Settings for more)'
-            }
-          >
-            {currentTheme.type === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
+    <TooltipProvider>
+      <div className="pd-app">
+        <header className="pd-topbar">
+          <h1>Pattern Detector</h1>
+          <span className="pd-spacer" />
+          <div className="pd-topbar-actions" role="toolbar" aria-label="App actions">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={toggleLog}
+              title="Toggle log (Cmd+`)"
+            >
+              <Terminal size={14} /> Log
+            </Button>
+            <IconButton
+              size="sm"
+              onClick={openShortcuts}
+              title="Shortcuts (Cmd+/)"
+              aria-label="Shortcuts"
+            >
+              <Keyboard size={14} />
+            </IconButton>
+            <IconButton size="sm" onClick={openAbout} title="About" aria-label="About">
+              <Info size={14} />
+            </IconButton>
+            <IconButton
+              size="sm"
+              onClick={openSettings}
+              title="Settings (Cmd+,)"
+              aria-label="Settings"
+            >
+              <SettingsIcon size={14} />
+            </IconButton>
+            <IconButton
+              size="sm"
+              onClick={toggleLightDark}
+              title={
+                currentTheme.type === 'dark'
+                  ? 'Switch to light theme (open Settings for more)'
+                  : 'Switch to dark theme (open Settings for more)'
+              }
+              aria-label={currentTheme.type === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {currentTheme.type === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            </IconButton>
+          </div>
+        </header>
+
+        <div className="pd-dockview-wrap">
+          <DockviewReact
+            className="dockview-theme-pattern-detector"
+            theme={{ name: 'pattern-detector', className: '' }}
+            components={components}
+            onReady={onReady}
+          />
         </div>
-      </header>
 
-      <div className="pd-dockview-wrap">
-        <DockviewReact
-          className="dockview-theme-pattern-detector"
-          theme={{ name: 'pattern-detector', className: '' }}
-          components={components}
-          onReady={onReady}
-        />
+        {isLogOpen ? <LogBar /> : null}
+
+        <SettingsModal />
+        <AboutModal />
+        <ShortcutsModal />
       </div>
-
-      {isLogOpen ? <LogBar /> : null}
-
-      <SettingsModal />
-      <AboutModal />
-      <ShortcutsModal />
-    </div>
+    </TooltipProvider>
   );
 }

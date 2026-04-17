@@ -17,7 +17,7 @@
     "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true,
     "allowJs": false,
-    "types": ["vite/client"]
+    "types": ["vite/client", "vitest/globals"]
   },
   "include": ["src"]
 }

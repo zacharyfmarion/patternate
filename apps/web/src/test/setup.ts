@@ -1,0 +1,93 @@
+import '@testing-library/jest-dom/vitest';
+import { cleanup } from '@testing-library/react';
+import { afterEach, beforeEach, vi } from 'vitest';
+
+import { useEditStore } from '../store/editStore';
+import { usePipelineStore } from '../store/pipelineStore';
+import { useWorkspacePrefsStore } from '../store/workspacePrefsStore';
+
+const pipelineActionDefaults = {
+  setInput: usePipelineStore.getState().setInput,
+  clearInput: usePipelineStore.getState().clearInput,
+  run: usePipelineStore.getState().run,
+  rerunOutline: usePipelineStore.getState().rerunOutline,
+  pushToast: usePipelineStore.getState().pushToast,
+  clearToasts: usePipelineStore.getState().clearToasts,
+};
+
+if (!window.matchMedia) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.defineProperty(globalThis, 'ResizeObserver', {
+  writable: true,
+  value: ResizeObserverMock,
+});
+
+Object.defineProperty(URL, 'createObjectURL', {
+  writable: true,
+  value: vi.fn(() => 'blob:mock-url'),
+});
+
+Object.defineProperty(URL, 'revokeObjectURL', {
+  writable: true,
+  value: vi.fn(),
+});
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+  writable: true,
+  value: vi.fn(() => ({
+    clearRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    closePath: vi.fn(),
+    stroke: vi.fn(),
+    fill: vi.fn(),
+    arc: vi.fn(),
+  })),
+});
+
+beforeEach(() => {
+  cleanup();
+  localStorage.clear();
+  useWorkspacePrefsStore.setState({ welcomeMode: 'guided' });
+  useEditStore.getState().discard();
+  usePipelineStore.setState({
+    fileName: null,
+    fileBytes: null,
+    previewUrl: null,
+    runStatus: 'idle',
+    runError: null,
+    result: null,
+    preparedUrl: null,
+    rectifiedUrl: null,
+    maskUrl: null,
+    runProgress: [],
+    toasts: [],
+    ...pipelineActionDefaults,
+  });
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  cleanup();
+});

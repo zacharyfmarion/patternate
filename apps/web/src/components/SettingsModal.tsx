@@ -7,6 +7,7 @@ import { useThemeStore } from '../store/themeStore';
 import { getAvailableThemes } from '../themes/presets';
 import { SettingsCard, SettingsCardHeader, SettingsCardSection } from './SettingsCard';
 import { ThemePicker } from './ThemePicker';
+import { Button, IconButton } from './ui';
 
 type SettingsTab = 'general' | 'theme';
 
@@ -117,9 +118,9 @@ export function SettingsModal() {
       </SettingsCard>
 
       <div className="pd-settings-dialog-actions">
-        <button type="button" className="pd-btn pd-btn-ghost" onClick={resetSettings}>
+        <Button type="button" variant="ghost" onClick={resetSettings}>
           Reset pipeline to defaults
-        </button>
+        </Button>
       </div>
     </>
   ) : (
@@ -163,14 +164,9 @@ export function SettingsModal() {
             <header className="pd-settings-dialog-header">
               <Dialog.Title className="pd-settings-dialog-heading">{activeLabel}</Dialog.Title>
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="pd-dialog-close"
-                  title="Close"
-                  aria-label="Close settings"
-                >
+                <IconButton size="sm" title="Close" aria-label="Close settings">
                   <X size={18} />
-                </button>
+                </IconButton>
               </Dialog.Close>
             </header>
 

@@ -20,6 +20,7 @@ import {
   type NodeKind,
   type SplinePath,
 } from '../edit/splinePath';
+import { Button } from '../components/ui';
 
 function formatNumber(n: number | null | undefined, digits = 2): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '—';
@@ -161,26 +162,35 @@ function ExportButtons({
   return (
     <Section title="Export">
       <div className="pd-export-grid">
-        <button
-          className="pd-btn pd-btn-primary"
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          className="gap-1"
           onClick={() => {
             download(`${base}.svg`, new Blob([outline.svg], { type: 'image/svg+xml' }));
             done(`${base}.svg`);
           }}
         >
           <Download size={12} /> SVG
-        </button>
-        <button
-          className="pd-btn"
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="gap-1"
           onClick={() => {
             download(`${base}.dxf`, new Blob([outline.dxf], { type: 'application/dxf' }));
             done(`${base}.dxf`);
           }}
         >
           <Download size={12} /> DXF
-        </button>
-        <button
-          className="pd-btn"
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="gap-1"
           onClick={() => {
             const payload = {
               metadata: result.metadata,
@@ -198,9 +208,12 @@ function ExportButtons({
           }}
         >
           <Download size={12} /> JSON
-        </button>
-        <button
-          className="pd-btn"
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="gap-1"
           onClick={() => {
             download(
               `${base}_rectified.png`,
@@ -210,9 +223,12 @@ function ExportButtons({
           }}
         >
           <Download size={12} /> Rectified PNG
-        </button>
-        <button
-          className="pd-btn"
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="gap-1"
           onClick={() => {
             download(
               `${base}_mask.png`,
@@ -222,7 +238,7 @@ function ExportButtons({
           }}
         >
           <Download size={12} /> Mask PNG
-        </button>
+        </Button>
       </div>
     </Section>
   );
@@ -466,14 +482,16 @@ function InspectorEditMode({
           </dl>
           <div className="pd-row" style={{ gap: 6, marginTop: 4 }}>
             {(['corner', 'smooth', 'symmetric'] as NodeKind[]).map((k) => (
-              <button
+              <Button
                 key={k}
-                className="pd-btn"
-                data-active={selectedNode.kind === k}
+                type="button"
+                variant="secondary"
+                size="sm"
+                isActive={selectedNode.kind === k}
                 onClick={() => setNodeKind(selectedNode.id, k)}
               >
                 {k}
-              </button>
+              </Button>
             ))}
           </div>
         </Section>
@@ -499,20 +517,24 @@ function InspectorEditMode({
           onChange={(e) => setTension(Number(e.target.value))}
         />
         <div className="pd-row" style={{ gap: 6 }}>
-          <button
-            className="pd-btn"
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
             disabled={!polygon}
             onClick={() => polygon && autoSmooth(polygon, tension)}
           >
             Apply
-          </button>
-          <button
-            className="pd-btn"
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
             disabled={!polygon}
             onClick={() => polygon && resetFromPolygon(polygon)}
           >
             Reset to polygon
-          </button>
+          </Button>
         </div>
       </Section>
 
@@ -552,25 +574,25 @@ function InspectorEditMode({
 
       <Section title="Export">
         <div className="pd-export-grid">
-          <button className="pd-btn pd-btn-primary" onClick={() => exportAs('svg')}>
+          <Button type="button" variant="primary" size="sm" className="gap-1" onClick={() => exportAs('svg')}>
             <Download size={12} /> SVG
-          </button>
-          <button className="pd-btn" onClick={() => exportAs('dxf')}>
+          </Button>
+          <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={() => exportAs('dxf')}>
             <Download size={12} /> DXF
-          </button>
-          <button className="pd-btn" onClick={() => exportAs('json')}>
+          </Button>
+          <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={() => exportAs('json')}>
             <Download size={12} /> JSON
-          </button>
-          <button className="pd-btn" onClick={() => exportAs('mask')}>
+          </Button>
+          <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={() => exportAs('mask')}>
             <Download size={12} /> Mask PNG
-          </button>
+          </Button>
         </div>
       </Section>
 
       <div className="pd-row" style={{ gap: 6 }}>
-        <button className="pd-btn" onClick={exitEdit}>
+        <Button type="button" variant="secondary" onClick={exitEdit}>
           Done
-        </button>
+        </Button>
       </div>
     </>
   );
