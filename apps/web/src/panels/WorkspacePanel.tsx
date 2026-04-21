@@ -9,7 +9,9 @@ import {
   Camera,
   FileImage,
   CheckCircle2,
+  RotateCw,
 } from 'lucide-react';
+import { Modal } from '../components/Modal';
 
 import { usePipelineStore } from '../store/pipelineStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -77,6 +79,94 @@ type WelcomeStep = 'reference' | 'photo' | 'upload';
 // ---------------------------------------------------------------------------
 // Overlay renderers
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Orientation helpers
+// ---------------------------------------------------------------------------
+
+async function getImageDimensions(bytes: Uint8Array): Promise<{ width: number; height: number }> {
+  const bitmap = await createImageBitmap(new Blob([bytes]));
+  const { width, height } = bitmap;
+  bitmap.close();
+  return { width, height };
+}
+
+const MAX_DIMENSION_PX = 3000;
+
+async function rotateCW90(bytes: Uint8Array): Promise<Uint8Array> {
+  const bitmap = await createImageBitmap(new Blob([bytes]));
+  const { width: w, height: h } = bitmap;
+  const canvas = new OffscreenCanvas(h, w);
+  const ctx = canvas.getContext('2d')!;
+  ctx.translate(h, 0);
+  ctx.rotate(Math.PI / 2);
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.95 });
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+async function resizeIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {
+  const bitmap = await createImageBitmap(new Blob([bytes]));
+  const { width: w, height: h } = bitmap;
+  if (Math.max(w, h) <= MAX_DIMENSION_PX) {
+    bitmap.close();
+    return bytes;
+  }
+  const scale = MAX_DIMENSION_PX / Math.max(w, h);
+  const nw = Math.round(w * scale);
+  const nh = Math.round(h * scale);
+  const canvas = new OffscreenCanvas(nw, nh);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bitmap, 0, 0, nw, nh);
+  bitmap.close();
+  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.95 });
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+interface OrientationPending {
+  name: string;
+  bytes: Uint8Array;
+  previewUrl: string;
+  autoRun: boolean;
+}
+
+function OrientationCheckDialog({
+  pending,
+  onRotate,
+  onUseAsIs,
+  onCancel,
+}: {
+  pending: OrientationPending;
+  onRotate: () => void;
+  onUseAsIs: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => { if (!open) onCancel(); }}
+      title="Portrait photo detected"
+      description="Board detection works best with landscape photos. Rotate 90° clockwise to convert this photo to landscape before processing."
+      footer={
+        <div className="pd-row">
+          <Button type="button" variant="primary" className="gap-1.5" onClick={onRotate}>
+            <RotateCw size={14} /> Rotate and continue
+          </Button>
+          <Button type="button" variant="secondary" onClick={onUseAsIs}>
+            Use as-is
+          </Button>
+        </div>
+      }
+    >
+      <img
+        src={pending.previewUrl}
+        alt="Preview of uploaded photo"
+        style={{ maxHeight: 300, maxWidth: '100%', objectFit: 'contain', borderRadius: 6 }}
+      />
+    </Modal>
+  );
+}
 
 function drawDetectionOverlay(
   canvas: HTMLCanvasElement,
@@ -534,6 +624,7 @@ export function WorkspacePanel() {
   useEditKeyboardShortcuts();
 
   const [dragging, setDragging] = useState(false);
+  const [orientationPending, setOrientationPending] = useState<OrientationPending | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const outlineMeta = result?.outline?.metadata ?? null;
   const fileStem = fileName?.replace(/\.[^.]+$/, '') ?? '';
@@ -604,7 +695,15 @@ export function WorkspacePanel() {
   async function handleFile(file: File, { autoRun = false }: { autoRun?: boolean } = {}) {
     try {
       const arrayBuf = await file.arrayBuffer();
-      await loadInput(file.name, new Uint8Array(arrayBuf), { autoRun });
+      const bytes = new Uint8Array(arrayBuf);
+      const { width, height } = await getImageDimensions(bytes);
+      if (height > width) {
+        const previewUrl = URL.createObjectURL(new Blob([bytes], { type: file.type }));
+        setOrientationPending({ name: file.name, bytes, previewUrl, autoRun });
+        return;
+      }
+      const resized = await resizeIfNeeded(bytes);
+      await loadInput(file.name, resized, { autoRun });
     } catch (err) {
       pushToast('error', `Failed to load ${file.name}: ${String(err)}`);
     }
@@ -624,6 +723,15 @@ export function WorkspacePanel() {
     }
   }
 
+  async function commitOrientation(bytes: Uint8Array, name: string, autoRun: boolean) {
+    if (orientationPending) {
+      URL.revokeObjectURL(orientationPending.previewUrl);
+      setOrientationPending(null);
+    }
+    const resized = await resizeIfNeeded(bytes);
+    await loadInput(name, resized, { autoRun });
+  }
+
   // ---------- STATE: no file loaded ----------
   if (!fileName) {
     return (
@@ -639,6 +747,24 @@ export function WorkspacePanel() {
             e.currentTarget.value = '';
           }}
         />
+
+        {orientationPending ? (
+          <OrientationCheckDialog
+            pending={orientationPending}
+            onRotate={() => {
+              const { name, bytes, autoRun } = orientationPending;
+              void rotateCW90(bytes).then((rotated) => commitOrientation(rotated, name, autoRun));
+            }}
+            onUseAsIs={() => {
+              const { name, bytes, autoRun } = orientationPending;
+              void commitOrientation(bytes, name, autoRun);
+            }}
+            onCancel={() => {
+              URL.revokeObjectURL(orientationPending.previewUrl);
+              setOrientationPending(null);
+            }}
+          />
+        ) : null}
 
         <WelcomeEmptyState
           welcomeMode={welcomeMode}
@@ -668,6 +794,24 @@ export function WorkspacePanel() {
           e.currentTarget.value = '';
         }}
       />
+
+      {orientationPending ? (
+        <OrientationCheckDialog
+          pending={orientationPending}
+          onRotate={() => {
+            const { name, bytes, autoRun } = orientationPending;
+            void rotateCW90(bytes).then((rotated) => commitOrientation(rotated, name, autoRun));
+          }}
+          onUseAsIs={() => {
+            const { name, bytes, autoRun } = orientationPending;
+            void commitOrientation(bytes, name, autoRun);
+          }}
+          onCancel={() => {
+            URL.revokeObjectURL(orientationPending.previewUrl);
+            setOrientationPending(null);
+          }}
+        />
+      ) : null}
 
       <section className="pd-workspace-header">
         <div className="pd-workspace-header-copy">
