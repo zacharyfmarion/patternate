@@ -91,6 +91,8 @@ async function getImageDimensions(bytes: Uint8Array): Promise<{ width: number; h
   return { width, height };
 }
 
+const MAX_DIMENSION_PX = 3000;
+
 async function rotateCW90(bytes: Uint8Array): Promise<Uint8Array> {
   const bitmap = await createImageBitmap(new Blob([bytes]));
   const { width: w, height: h } = bitmap;
@@ -99,6 +101,24 @@ async function rotateCW90(bytes: Uint8Array): Promise<Uint8Array> {
   ctx.translate(h, 0);
   ctx.rotate(Math.PI / 2);
   ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.95 });
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+async function resizeIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {
+  const bitmap = await createImageBitmap(new Blob([bytes]));
+  const { width: w, height: h } = bitmap;
+  if (Math.max(w, h) <= MAX_DIMENSION_PX) {
+    bitmap.close();
+    return bytes;
+  }
+  const scale = MAX_DIMENSION_PX / Math.max(w, h);
+  const nw = Math.round(w * scale);
+  const nh = Math.round(h * scale);
+  const canvas = new OffscreenCanvas(nw, nh);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bitmap, 0, 0, nw, nh);
   bitmap.close();
   const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.95 });
   return new Uint8Array(await blob.arrayBuffer());
@@ -682,7 +702,8 @@ export function WorkspacePanel() {
         setOrientationPending({ name: file.name, bytes, previewUrl, autoRun });
         return;
       }
-      await loadInput(file.name, bytes, { autoRun });
+      const resized = await resizeIfNeeded(bytes);
+      await loadInput(file.name, resized, { autoRun });
     } catch (err) {
       pushToast('error', `Failed to load ${file.name}: ${String(err)}`);
     }
@@ -707,7 +728,8 @@ export function WorkspacePanel() {
       URL.revokeObjectURL(orientationPending.previewUrl);
       setOrientationPending(null);
     }
-    await loadInput(name, bytes, { autoRun });
+    const resized = await resizeIfNeeded(bytes);
+    await loadInput(name, resized, { autoRun });
   }
 
   // ---------- STATE: no file loaded ----------
