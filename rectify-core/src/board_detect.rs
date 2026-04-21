@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use image::GrayImage;
+use image::{DynamicImage, GrayImage};
 use nalgebra::Point2;
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +54,76 @@ pub struct BoardDetectionResult {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/// Detect a ChArUco board, automatically handling portrait-orientation images.
+///
+/// Tries detection in the given orientation first. If that fails and the image
+/// is portrait (height > width), retries after a 90° CW rotation to landscape —
+/// some phone photos (with EXIF orientation applied) are only detectable in
+/// landscape orientation due to a `calib_targets` bug with tall images. All
+/// returned image coordinates are transformed back to the original space.
+pub fn detect_board_in_image(
+    gray: &GrayImage,
+    board_spec: &BoardSpec,
+) -> Result<BoardDetectionResult> {
+    // Try detection in the original orientation first.
+    if let Ok(result) = detect_board(gray, board_spec) {
+        return Ok(result);
+    }
+
+    // Portrait-only fallback: rotate 90° CW to landscape, detect, transform back.
+    if gray.height() <= gray.width() {
+        return detect_board(gray, board_spec); // re-run to get the original error
+    }
+    let landscape = DynamicImage::ImageLuma8(gray.clone()).rotate90().into_luma8();
+    let mut result = detect_board(&landscape, board_spec)?;
+
+    // Map landscape coordinates back to portrait coordinates.
+    // Rotate90 CW: portrait(x, y) → landscape(H_p - 1 - y, x)
+    // Inverse: landscape(lx, ly) → portrait(ly, H_p - 1 - lx)
+    // As homogeneous matrix T (landscape → portrait):
+    //   [[0, 1, 0], [-1, 0, H_p - 1], [0, 0, 1]]
+    let h_p = (gray.height() as f64) - 1.0;
+    let t = [[0.0, 1.0, 0.0_f64], [-1.0, 0.0, h_p], [0.0, 0.0, 1.0]];
+
+    result.debug.homography_board_mm_to_image =
+        mat3_mul(&t, &result.debug.homography_board_mm_to_image);
+
+    if let Some(ref mut outline) = result.debug.summary.board_outline_image {
+        for pt in outline.iter_mut() {
+            *pt = transform_pt_f32(&t, *pt);
+        }
+    }
+    for corner in result.debug.charuco_corners.iter_mut() {
+        corner.image_xy = transform_pt_f32(&t, corner.image_xy);
+    }
+    for marker in result.debug.markers.iter_mut() {
+        for c in marker.corners_image.iter_mut() {
+            *c = transform_pt_f32(&t, *c);
+        }
+    }
+
+    Ok(result)
+}
+
+fn mat3_mul(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let mut c = [[0.0_f64; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            for k in 0..3 {
+                c[i][j] += a[i][k] * b[k][j];
+            }
+        }
+    }
+    c
+}
+
+fn transform_pt_f32(t: &[[f64; 3]; 3], [x, y]: [f32; 2]) -> [f32; 2] {
+    let (xd, yd) = (x as f64, y as f64);
+    let w = t[2][0] * xd + t[2][1] * yd + t[2][2];
+    [(( t[0][0] * xd + t[0][1] * yd + t[0][2]) / w) as f32,
+     ((t[1][0] * xd + t[1][1] * yd + t[1][2]) / w) as f32]
+}
 
 /// Detect a ChArUco board in `gray` using a pure-Rust detector.
 ///

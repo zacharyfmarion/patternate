@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(not(target_family = "wasm"))]
 use crate::board_spec::{BoardSpecSource, load_board_spec};
 use crate::{
-    board_detect::{BoardDetectionDebug, detect_board},
+    board_detect::{BoardDetectionDebug, detect_board_in_image},
     board_spec::BoardSpec,
     contour::{MmPolygon, pixels_to_mm, trace_outer_contour_px},
     homography::{Homography, RectifiedBounds, compute_rectified_bounds},
@@ -165,7 +165,7 @@ pub fn detect_board_in_memory(
     board_spec: &BoardSpec,
 ) -> Result<DetectBoardOutcome> {
     let loaded = load_image_from_bytes(image_bytes)?;
-    let detection = detect_board(&to_gray(&loaded.image), board_spec)?.debug;
+    let detection = detect_board_in_image(&to_gray(&loaded.image), board_spec)?.debug;
     let prepared_png = encode_png(&loaded.image)?;
 
     let metadata = build_metadata_board_only(&loaded, board_spec, &detection);
@@ -224,7 +224,7 @@ where
         RectifyProgressStatus::Running,
         "Detecting reference board",
     );
-    let detection = detect_board(&to_gray(&loaded.image), board_spec)?.debug;
+    let detection = detect_board_in_image(&to_gray(&loaded.image), board_spec)?.debug;
     progress(
         &mut on_progress,
         RectifyProgressStep::DetectBoard,

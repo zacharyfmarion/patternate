@@ -16,7 +16,7 @@ pub mod warp;
 
 pub use board_detect::{
     BoardDetectionDebug, BoardDetectionMarker, BoardDetectionResult, BoardDetectionSummary,
-    CharucoCornerObservation, detect_board,
+    CharucoCornerObservation, detect_board, detect_board_in_image,
 };
 pub use board_spec::{
     BoardFamily, BoardSpec, BoardSpecSource, builtin_board_spec_json, load_board_spec,
