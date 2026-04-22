@@ -162,8 +162,17 @@ export interface OutlineResult {
   dxf: string;
   json: unknown;
   polygonMm: Array<[number, number]>;
+  rawPolygonMm: Array<[number, number]>;
   metadata: OutlineMetadata;
   maskPng: Uint8Array;
+}
+
+export interface SimplifyOutlineResult {
+  svg: string;
+  dxf: string;
+  json: unknown;
+  polygonMm: Array<[number, number]>;
+  metadata: OutlineMetadata;
 }
 
 export interface RectifyResult {
@@ -190,5 +199,11 @@ export interface EngineBridge {
     boardId?: string,
     onProgress?: RectifyProgressHandler,
   ): Promise<RectifyResult>;
+  simplifyOutline(
+    rawPolygonMm: Array<[number, number]>,
+    simplifyMm: number,
+    segmentation: SegmentationStats,
+    vertexCountRaw: number,
+  ): Promise<SimplifyOutlineResult>;
   builtinBoardSpec(boardId: string): Promise<string>;
 }

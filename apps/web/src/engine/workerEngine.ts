@@ -6,6 +6,8 @@ import type {
   RectifyProgressHandler,
   RectifyOptions,
   RectifyResult,
+  SegmentationStats,
+  SimplifyOutlineResult,
 } from './types';
 import type { EngineWorkerApi } from './engineWorker';
 
@@ -45,6 +47,16 @@ export class WorkerEngine implements EngineBridge {
       boardId,
       onProgress ? Comlink.proxy(onProgress) : undefined,
     );
+  }
+
+  async simplifyOutline(
+    rawPolygonMm: Array<[number, number]>,
+    simplifyMm: number,
+    segmentation: SegmentationStats,
+    vertexCountRaw: number,
+  ): Promise<SimplifyOutlineResult> {
+    await this.ready;
+    return this.api.simplifyOutline(rawPolygonMm, simplifyMm, segmentation, vertexCountRaw);
   }
 
   async builtinBoardSpec(boardId: string): Promise<string> {

@@ -118,8 +118,11 @@ pub struct OutlineBundle {
     /// PNG-encoded piece mask (debug aid).
     #[serde(skip_serializing)]
     pub mask_png: Vec<u8>,
-    /// Polygon in millimetre coordinates on the board plane.
+    /// Polygon in millimetre coordinates on the board plane (simplified).
     pub polygon_mm: Vec<[f64; 2]>,
+    /// Raw (pre-simplification) polygon in mm. Cached so the JS layer can
+    /// re-apply a different RDP tolerance without re-running the full pipeline.
+    pub raw_polygon_mm: Vec<[f64; 2]>,
     /// Structured metadata (vertex counts, area, perimeter, segmentation).
     pub metadata: OutlineMetadata,
 }
@@ -463,6 +466,7 @@ fn extract_outline_in_memory(
 
     let pixel_contour = trace_outer_contour_px(&seg.mask)?;
     let raw_polygon = pixels_to_mm(&pixel_contour, bounds, pixels_per_mm);
+    let raw_polygon_mm = raw_polygon.points.clone();
     let raw_vertex_count = raw_polygon.len();
 
     let simplified = simplify_polygon(&raw_polygon, opts.simplify_mm);
@@ -495,6 +499,7 @@ fn extract_outline_in_memory(
         json,
         mask_png,
         polygon_mm: polygon.points.clone(),
+        raw_polygon_mm,
         metadata: OutlineMetadata {
             vertex_count_raw: raw_vertex_count,
             vertex_count_simplified: polygon.len(),
@@ -571,7 +576,7 @@ fn build_metadata_board_only(
     }
 }
 
-fn build_outline_json_payload(
+pub fn build_outline_json_payload(
     polygon: &MmPolygon,
     bbox: [f64; 4],
     area_mm2: f64,

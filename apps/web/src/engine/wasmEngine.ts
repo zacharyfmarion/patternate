@@ -8,6 +8,7 @@ import initWasm, {
   builtinBoardSpec as wasmBuiltinBoardSpec,
   detectBoard as wasmDetectBoard,
   rectify as wasmRectify,
+  simplifyOutline as wasmSimplifyOutline,
 } from '../wasm-pkg/rectify_wasm.js';
 
 import type {
@@ -17,6 +18,8 @@ import type {
   RectifyProgressHandler,
   RectifyOptions,
   RectifyResult,
+  SegmentationStats,
+  SimplifyOutlineResult,
 } from './types';
 
 let initPromise: Promise<unknown> | null = null;
@@ -78,6 +81,28 @@ export const wasmEngine: EngineBridge = {
             maskPng: outline.maskPng as Uint8Array,
           }
         : null,
+    };
+  },
+
+  async simplifyOutline(
+    rawPolygonMm: Array<[number, number]>,
+    simplifyMm: number,
+    segmentation: SegmentationStats,
+    vertexCountRaw: number,
+  ): Promise<SimplifyOutlineResult> {
+    await ensureInit();
+    const raw = wasmSimplifyOutline(
+      JSON.stringify(rawPolygonMm),
+      simplifyMm,
+      JSON.stringify(segmentation),
+      vertexCountRaw,
+    ) as Record<string, unknown>;
+    return {
+      svg: raw.svg as string,
+      dxf: raw.dxf as string,
+      json: raw.json,
+      polygonMm: raw.polygonMm as Array<[number, number]>,
+      metadata: raw.metadata as SimplifyOutlineResult['metadata'],
     };
   },
 

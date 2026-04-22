@@ -9,6 +9,7 @@ import initWasm, {
   builtinBoardSpec,
   detectBoard as wasmDetectBoard,
   rectify as wasmRectify,
+  simplifyOutline as wasmSimplifyOutline,
 } from '../wasm-pkg/rectify_wasm.js';
 
 import type {
@@ -17,6 +18,8 @@ import type {
   RectifyProgressHandler,
   RectifyOptions,
   RectifyResult,
+  SegmentationStats,
+  SimplifyOutlineResult,
 } from './types';
 
 let initPromise: Promise<unknown> | null = null;
@@ -81,6 +84,7 @@ const api = {
           dxf: outline.dxf as string,
           json: outline.json,
           polygonMm: outline.polygonMm as Array<[number, number]>,
+          rawPolygonMm: outline.rawPolygonMm as Array<[number, number]>,
           metadata: outline.metadata as RectifyResult['outline'] extends null
             ? never
             : NonNullable<RectifyResult['outline']>['metadata'],
@@ -103,6 +107,28 @@ const api = {
     const transferables: Transferable[] = [preparedPng.buffer, rectifiedPng.buffer];
     if (outlineResult) transferables.push(outlineResult.maskPng.buffer);
     return Comlink.transfer(result, transferables);
+  },
+
+  async simplifyOutline(
+    rawPolygonMm: Array<[number, number]>,
+    simplifyMm: number,
+    segmentation: SegmentationStats,
+    vertexCountRaw: number,
+  ): Promise<SimplifyOutlineResult> {
+    await ensureInit();
+    const raw = wasmSimplifyOutline(
+      JSON.stringify(rawPolygonMm),
+      simplifyMm,
+      JSON.stringify(segmentation),
+      vertexCountRaw,
+    ) as Record<string, unknown>;
+    return {
+      svg: raw.svg as string,
+      dxf: raw.dxf as string,
+      json: raw.json,
+      polygonMm: raw.polygonMm as Array<[number, number]>,
+      metadata: raw.metadata as SimplifyOutlineResult['metadata'],
+    };
   },
 };
 

@@ -103,7 +103,7 @@ impl SegmentationOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct SegmentationStats {
     pub background_rgb: [u8; 3],
     pub otsu_threshold: u8,

@@ -55,8 +55,9 @@ interface RunSlice {
   rectifiedUrl: string | null;
   maskUrl: string | null;
   runProgress: RunProgressItem[];
+  resimplifyStatus: 'idle' | 'running';
   run: () => Promise<void>;
-  rerunOutline: () => Promise<void>;
+  resimplify: (simplifyMm: number) => Promise<void>;
 }
 
 interface ToastSlice {
@@ -216,6 +217,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
   rectifiedUrl: null,
   maskUrl: null,
   runProgress: [],
+  resimplifyStatus: 'idle',
   async run() {
     const { fileBytes } = get();
     if (!fileBytes) {
@@ -330,10 +332,48 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       get().pushToast('error', `Run failed: ${message}`);
     }
   },
-  async rerunOutline() {
-    // Re-runs the full pipeline with the current simplify setting.
-    // Cheap enough at typical resolutions and keeps the model simple.
-    await get().run();
+  async resimplify(simplifyMm: number) {
+    const { result } = get();
+    const outline = result?.outline;
+    if (!outline?.rawPolygonMm?.length) {
+      // No cached raw polygon — fall back to full run
+      await get().run();
+      return;
+    }
+    set({ resimplifyStatus: 'running' });
+    try {
+      const engine = await getEngine();
+      const updated = await engine.simplifyOutline(
+        outline.rawPolygonMm,
+        simplifyMm,
+        outline.metadata.segmentation,
+        outline.metadata.vertex_count_raw,
+      );
+      set((state) => {
+        if (!state.result?.outline) return {};
+        return {
+          result: {
+            ...state.result,
+            metadata: {
+              ...state.result.metadata,
+              outline: updated.metadata,
+            },
+            outline: {
+              ...state.result.outline,
+              svg: updated.svg,
+              dxf: updated.dxf,
+              json: updated.json,
+              polygonMm: updated.polygonMm,
+              metadata: updated.metadata,
+            },
+          },
+        };
+      });
+    } catch (err) {
+      get().pushToast('error', `Simplify failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      set({ resimplifyStatus: 'idle' });
+    }
   },
 });
 

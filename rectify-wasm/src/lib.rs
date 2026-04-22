@@ -6,9 +6,12 @@
 
 use rectify_core::{
     BoardSpec, BoardSpecSource, DetectBoardOutcome, OutlineOptions, RectifyOptions, RectifyOutcome,
-    RectifyProgressEvent, RectifyProgressStatus, RectifyProgressStep, builtin_board_spec_json,
-    detect_board_in_memory, load_board_spec, load_builtin_board_spec, rectify_in_memory,
-    rectify_in_memory_with_progress,
+    RectifyProgressEvent, RectifyProgressStatus, RectifyProgressStep,
+    MmPolygon, OutlineMetadata, SegmentationStats,
+    build_outline_json_payload, builtin_board_spec_json,
+    detect_board_in_memory, load_board_spec, load_builtin_board_spec,
+    rectify_in_memory, rectify_in_memory_with_progress,
+    render_dxf, render_svg, simplify_polygon,
 };
 use js_sys::Function;
 use serde::Serialize;
@@ -179,6 +182,7 @@ struct OutlinePayload<'a> {
     dxf: &'a str,
     json: &'a serde_json::Value,
     polygon_mm: &'a [[f64; 2]],
+    raw_polygon_mm: &'a [[f64; 2]],
     metadata: &'a rectify_core::OutlineMetadata,
     #[serde(with = "serde_bytes")]
     mask_png: &'a [u8],
@@ -191,10 +195,78 @@ impl<'a> OutlinePayload<'a> {
             dxf: &bundle.dxf,
             json: &bundle.json,
             polygon_mm: &bundle.polygon_mm,
+            raw_polygon_mm: &bundle.raw_polygon_mm,
             metadata: &bundle.metadata,
             mask_png: &bundle.mask_png,
         }
     }
+}
+
+/// Re-apply a different RDP tolerance to a cached raw polygon without
+/// re-running the full pipeline. Returns the same shape as `OutlinePayload`
+/// minus `maskPng` and `rawPolygonMm` (those are unchanged).
+#[wasm_bindgen(js_name = simplifyOutline)]
+pub fn simplify_outline(
+    raw_polygon_json: String,
+    simplify_mm: f64,
+    segmentation_json: String,
+    vertex_count_raw: usize,
+) -> Result<JsValue, JsError> {
+    let raw_points: Vec<[f64; 2]> =
+        serde_json::from_str(&raw_polygon_json).map_err(|e| JsError::new(&e.to_string()))?;
+    let seg_stats: SegmentationStats =
+        serde_json::from_str(&segmentation_json).map_err(|e| JsError::new(&e.to_string()))?;
+
+    let raw_polygon = MmPolygon { points: raw_points };
+    let simplified = simplify_polygon(&raw_polygon, simplify_mm);
+
+    let bbox = simplified
+        .bbox()
+        .ok_or_else(|| JsError::new("simplified polygon has no vertices"))?;
+    let area_mm2 = simplified.area_abs();
+    let perimeter_mm = simplified.perimeter();
+
+    let svg = render_svg(&simplified, bbox);
+    let dxf = render_dxf(&simplified, bbox);
+    let json = build_outline_json_payload(
+        &simplified,
+        bbox,
+        area_mm2,
+        perimeter_mm,
+        vertex_count_raw,
+        simplify_mm,
+        seg_stats,
+    );
+
+    let metadata = OutlineMetadata {
+        vertex_count_raw,
+        vertex_count_simplified: simplified.len(),
+        simplify_tolerance_mm: simplify_mm,
+        bounding_box_mm: bbox,
+        area_mm2,
+        perimeter_mm,
+        segmentation: seg_stats,
+    };
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SimplifyOutlinePayload {
+        svg: String,
+        dxf: String,
+        json: serde_json::Value,
+        polygon_mm: Vec<[f64; 2]>,
+        metadata: OutlineMetadata,
+    }
+
+    let payload = SimplifyOutlinePayload {
+        svg,
+        dxf,
+        json,
+        polygon_mm: simplified.points,
+        metadata,
+    };
+
+    serde_wasm_bindgen::to_value(&payload).map_err(|e| JsError::new(&e.to_string()))
 }
 
 // `serde_bytes` isn't in the default dep graph. Provide a tiny serializer that

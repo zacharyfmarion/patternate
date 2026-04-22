@@ -281,7 +281,8 @@ function SimplifyControl() {
   const settings = useSettingsStore((s) => s.settings);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
   const runStatus = usePipelineStore((s) => s.runStatus);
-  const rerunOutline = usePipelineStore((s) => s.rerunOutline);
+  const resimplify = usePipelineStore((s) => s.resimplify);
+  const resimplifyStatus = usePipelineStore((s) => s.resimplifyStatus);
   const result = usePipelineStore((s) => s.result);
 
   const [value, setValue] = useState(settings.simplifyMm);
@@ -295,7 +296,7 @@ function SimplifyControl() {
     debounceRef.current = setTimeout(() => {
       updateSettings({ simplifyMm: next });
       if (result && runStatus === 'success') {
-        rerunOutline();
+        resimplify(next);
       }
     }, 250);
   }
@@ -303,7 +304,12 @@ function SimplifyControl() {
   return (
     <Section title="Simplify">
       <div className="pd-row-between">
-        <span>{value.toFixed(2)} mm</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {value.toFixed(2)} mm
+          {resimplifyStatus === 'running' ? (
+            <span className="pd-spinner pd-spinner-sm" aria-label="Updating outline…" />
+          ) : null}
+        </span>
         <span style={{ color: 'var(--fg-muted)', fontSize: 11 }}>
           Douglas–Peucker tolerance
         </span>
