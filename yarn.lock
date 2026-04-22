@@ -3457,6 +3457,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-zoom-pan-pinch@npm:^4.0.3":
+  version: 4.0.3
+  resolution: "react-zoom-pan-pinch@npm:4.0.3"
+  peerDependencies:
+    react: "*"
+    react-dom: "*"
+  checksum: aff02f36ac78fc19a3fa0e0cf64becfbe750d947ea45cc8308c84a3604a0a2477c1e7f63d170b36d0a2227bd352a4c5edb101f4e9b2ba51bbed3514be553db58
+  languageName: node
+  linkType: hard
+
 "react@npm:^19.2.0":
   version: 19.2.5
   resolution: "react@npm:19.2.5"
@@ -4329,6 +4339,7 @@ __metadata:
     postcss: ^8.4.49
     react: ^19.2.0
     react-dom: ^19.2.0
+    react-zoom-pan-pinch: ^4.0.3
     tailwindcss: ^3.4.16
     typescript: ~5.9.3
     vite: ^7.3.1

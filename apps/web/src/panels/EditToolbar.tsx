@@ -37,18 +37,8 @@ export function EditToolbar() {
     }
     exitEdit();
   }
-  const toolHint =
-    activeTool === 'pen'
-      ? 'Click a segment to add a point.'
-      : 'Select and drag points or handles to refine the shape.';
-
   return (
     <div className="pd-edit-toolbar">
-      <div className="pd-edit-toolbar-copy">
-        <div className="pd-edit-toolbar-title">Curve editor</div>
-        <div className="pd-edit-toolbar-hint">{toolHint}</div>
-      </div>
-
       <div className="pd-edit-toolbar-controls">
         <div className="pd-edit-toolgroup" role="group" aria-label="Tools">
           <Button

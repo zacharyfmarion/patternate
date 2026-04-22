@@ -1,10 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { WorkspacePanel } from './WorkspacePanel';
+import { TooltipProvider } from '../components/ui';
 import { usePipelineStore } from '../store/pipelineStore';
 import { WORKSPACE_PREFS_STORAGE_KEY, useWorkspacePrefsStore } from '../store/workspacePrefsStore';
 
 function renderWorkspacePanel() {
-  return render(<WorkspacePanel />);
+  return render(
+    <TooltipProvider>
+      <WorkspacePanel />
+    </TooltipProvider>,
+  );
 }
 
 describe('WorkspacePanel welcome flow', () => {

@@ -10,14 +10,23 @@ import {
   FileImage,
   CheckCircle2,
   RotateCw,
+  Minus,
+  Plus,
+  Maximize2,
 } from 'lucide-react';
+import {
+  TransformWrapper,
+  TransformComponent,
+  useControls,
+  useTransformComponent,
+} from 'react-zoom-pan-pinch';
 import { Modal } from '../components/Modal';
 
 import { usePipelineStore } from '../store/pipelineStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useEditStore } from '../store/editStore';
 import { useWorkspacePrefsStore, type WelcomeMode } from '../store/workspacePrefsStore';
-import { Button } from '../components/ui';
+import { Button, IconButton } from '../components/ui';
 import { EditOverlay, useEditKeyboardShortcuts } from './EditOverlay';
 import { EditToolbar } from './EditToolbar';
 import type { BoardDetectionDebug, RectifyResult } from '../engine/types';
@@ -813,7 +822,6 @@ export function WorkspacePanel() {
 
       <section className="pd-workspace-header">
         <div className="pd-workspace-header-copy">
-          <div className="pd-workspace-eyebrow">Current image</div>
           <div className="pd-workspace-title-row">
             <h2 className="pd-workspace-title" title={fileName}>
               {fileStem}
@@ -823,19 +831,17 @@ export function WorkspacePanel() {
             </span>
           </div>
           <p className="pd-workspace-summary">{workspaceState.summary}</p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="self-start gap-1.5 !px-0 text-xs font-semibold"
-            onClick={() => fileInputRef.current?.click()}
-            title="Replace the current image"
-          >
-            <Upload size={14} /> Replace image
-          </Button>
         </div>
 
         <div className="pd-workspace-header-actions">
+          <IconButton
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            title="Replace image"
+            aria-label="Replace image"
+          >
+            <Upload size={14} />
+          </IconButton>
           {runStatus === 'success' && result?.outline && !editMode ? (
             <Button
               type="button"
@@ -967,20 +973,58 @@ function Viewport({
   const showRectified =
     runStatus === 'success' && rectifiedUrl !== null && result !== null;
   const baseUrl = preparedUrl ?? previewUrl;
+  const transformKey = rectifiedUrl ?? preparedUrl ?? previewUrl ?? '';
 
   return (
     <div className="pd-viewport">
-      {editMode && showRectified ? (
-        <RectifiedWithEditOverlay url={rectifiedUrl!} result={result!} />
-      ) : showRectified ? (
-        <RectifiedWithOutline url={rectifiedUrl!} result={result!} />
-      ) : baseUrl ? (
-        <InputWithDetection
-          key={baseUrl}
-          url={baseUrl}
-          detection={showOverlays && result?.detection ? result.detection : null}
-        />
-      ) : null}
+      <TransformWrapper
+        key={transformKey}
+        minScale={0.25}
+        maxScale={8}
+        centerOnInit
+        wheel={{ wheelDisabled: true }}
+        trackPadPanning={{ disabled: false }}
+        panning={{ excluded: ['pd-edit-overlay'] }}
+      >
+        <TransformComponent
+          wrapperStyle={{ width: '100%', height: '100%' }}
+          contentStyle={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          {editMode && showRectified ? (
+            <RectifiedWithEditOverlay url={rectifiedUrl!} result={result!} />
+          ) : showRectified ? (
+            <RectifiedWithOutline url={rectifiedUrl!} result={result!} />
+          ) : baseUrl ? (
+            <InputWithDetection
+              key={baseUrl}
+              url={baseUrl}
+              detection={showOverlays && result?.detection ? result.detection : null}
+            />
+          ) : null}
+        </TransformComponent>
+        <ZoomControls />
+      </TransformWrapper>
+    </div>
+  );
+}
+
+function ZoomControls() {
+  const { zoomIn, zoomOut, resetTransform } = useControls();
+  const scale = useTransformComponent(({ state }) => state.scale);
+
+  return (
+    <div className="pd-zoom-controls">
+      <IconButton size="sm" onClick={() => zoomOut()} title="Zoom out" aria-label="Zoom out">
+        <Minus size={12} />
+      </IconButton>
+      <span className="pd-zoom-label">{Math.round(scale * 100)}%</span>
+      <IconButton size="sm" onClick={() => zoomIn()} title="Zoom in" aria-label="Zoom in">
+        <Plus size={12} />
+      </IconButton>
+      <div className="pd-zoom-sep" />
+      <IconButton size="sm" onClick={() => resetTransform()} title="Fit to view" aria-label="Fit to view">
+        <Maximize2 size={12} />
+      </IconButton>
     </div>
   );
 }
