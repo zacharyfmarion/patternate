@@ -16,10 +16,8 @@ node_modules
 !.yarn/sdks
 !.yarn/versions
 .pnp.*
-.yarnrc.yml
 .yarn
 
 # Web
 apps/web/dist
 apps/web/src/wasm-pkg
-

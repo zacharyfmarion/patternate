@@ -94,7 +94,7 @@ type WelcomeStep = 'reference' | 'photo' | 'upload';
 // ---------------------------------------------------------------------------
 
 async function getImageDimensions(bytes: Uint8Array): Promise<{ width: number; height: number }> {
-  const bitmap = await createImageBitmap(new Blob([bytes]));
+  const bitmap = await createImageBitmap(new Blob([bytes as BlobPart]));
   const { width, height } = bitmap;
   bitmap.close();
   return { width, height };
@@ -103,7 +103,7 @@ async function getImageDimensions(bytes: Uint8Array): Promise<{ width: number; h
 const MAX_DIMENSION_PX = 3000;
 
 async function rotateCW90(bytes: Uint8Array): Promise<Uint8Array> {
-  const bitmap = await createImageBitmap(new Blob([bytes]));
+  const bitmap = await createImageBitmap(new Blob([bytes as BlobPart]));
   const { width: w, height: h } = bitmap;
   const canvas = new OffscreenCanvas(h, w);
   const ctx = canvas.getContext('2d')!;
@@ -116,7 +116,7 @@ async function rotateCW90(bytes: Uint8Array): Promise<Uint8Array> {
 }
 
 async function resizeIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {
-  const bitmap = await createImageBitmap(new Blob([bytes]));
+  const bitmap = await createImageBitmap(new Blob([bytes as BlobPart]));
   const { width: w, height: h } = bitmap;
   if (Math.max(w, h) <= MAX_DIMENSION_PX) {
     bitmap.close();
@@ -974,6 +974,32 @@ function Viewport({
     runStatus === 'success' && rectifiedUrl !== null && result !== null;
   const baseUrl = preparedUrl ?? previewUrl;
   const transformKey = rectifiedUrl ?? preparedUrl ?? previewUrl ?? '';
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
+
+  useEffect(() => {
+    if (!editMode) {
+      setIsShiftPressed(false);
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') setIsShiftPressed(true);
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') setIsShiftPressed(false);
+    };
+    const clearShift = () => setIsShiftPressed(false);
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', clearShift);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', clearShift);
+    };
+  }, [editMode]);
 
   return (
     <div className="pd-viewport">
@@ -984,11 +1010,20 @@ function Viewport({
         centerOnInit
         wheel={{ wheelDisabled: true }}
         trackPadPanning={{ disabled: false }}
-        panning={{ excluded: ['pd-edit-overlay'] }}
+        panning={{
+          disabled: editMode ? !isShiftPressed : false,
+          excluded: editMode && isShiftPressed ? [] : ['pd-edit-overlay'],
+        }}
       >
         <TransformComponent
           wrapperStyle={{ width: '100%', height: '100%' }}
-          contentStyle={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          contentStyle={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
           {editMode && showRectified ? (
             <RectifiedWithEditOverlay url={rectifiedUrl!} result={result!} />
@@ -1025,6 +1060,18 @@ function ZoomControls() {
       <IconButton size="sm" onClick={() => resetTransform()} title="Fit to view" aria-label="Fit to view">
         <Maximize2 size={12} />
       </IconButton>
+    </div>
+  );
+}
+
+function RectifiedStage({
+  url,
+  children,
+}: React.PropsWithChildren<{ url: string }>) {
+  return (
+    <div className="pd-rectified-stage">
+      <img className="pd-rectified-media" src={url} alt="rectified" />
+      {children}
     </div>
   );
 }
@@ -1094,7 +1141,7 @@ function RectifiedWithOutline({
     return (
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="xMinYMin meet"
+        preserveAspectRatio="xMidYMid meet"
         style={{ width: '100%', height: '100%' }}
       >
         <path
@@ -1109,10 +1156,9 @@ function RectifiedWithOutline({
   }, [result]);
 
   return (
-    <div className="pd-overlay-stack">
-      <img src={url} alt="rectified" />
+    <RectifiedStage url={url}>
       {svg}
-    </div>
+    </RectifiedStage>
   );
 }
 
@@ -1129,8 +1175,7 @@ function RectifiedWithEditOverlay({
   const origin: [number, number] = [bounds[0], bounds[1]];
 
   return (
-    <div className="pd-overlay-stack">
-      <img src={url} alt="rectified" />
+    <RectifiedStage url={url}>
       {width > 0 && height > 0 ? (
         <EditOverlay
           widthPx={width}
@@ -1139,6 +1184,6 @@ function RectifiedWithEditOverlay({
           pxPerMm={result.pixelsPerMm}
         />
       ) : null}
-    </div>
+    </RectifiedStage>
   );
 }

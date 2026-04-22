@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { WorkspacePanel } from './WorkspacePanel';
+import type { RectifyResult } from '../engine/types';
 import { TooltipProvider } from '../components/ui';
+import { useEditStore } from '../store/editStore';
 import { usePipelineStore } from '../store/pipelineStore';
 import { WORKSPACE_PREFS_STORAGE_KEY, useWorkspacePrefsStore } from '../store/workspacePrefsStore';
 
@@ -10,6 +12,105 @@ function renderWorkspacePanel() {
       <WorkspacePanel />
     </TooltipProvider>,
   );
+}
+
+function makeRectifyResult(): RectifyResult {
+  return {
+    detection: {
+      summary: {
+        board_id: 'refboard_v1',
+        marker_count: 8,
+        charuco_corner_count: 24,
+        confidence: 0.99,
+        board_outline_image: null,
+        board_reprojection_rmse_px: 0.5,
+      },
+      homography_board_mm_to_image: [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+      ],
+      markers: [],
+      charuco_corners: [],
+    },
+    quality: {
+      schema_version: 1,
+      status: 'ok',
+      warnings: [],
+      metrics: {
+        blur_score: 1,
+        exposure_score: 1,
+        board_coverage: 1,
+        board_confidence: 1,
+        board_reprojection_rmse_px: 0.5,
+      },
+    },
+    metadata: {
+      schema_version: 1,
+      phase: 'finalize_results',
+      input_image: { width_px: 2400, height_px: 1600 },
+      prepared_image: { width_px: 1600, height_px: 1067 },
+      reference_board: {
+        board_id: 'refboard_v1',
+        squares_x: 11,
+        squares_y: 8,
+        square_size_mm: 15,
+        marker_size_mm: 11,
+      },
+      board_detection: {
+        board_id: 'refboard_v1',
+        marker_count: 8,
+        charuco_corner_count: 24,
+        confidence: 0.99,
+        board_outline_image: null,
+        board_reprojection_rmse_px: 0.5,
+      },
+      rectified_image: { width_px: 2400, height_px: 1200 },
+      rectified_bounds_mm: [0, 0, 1200, 600],
+      scale: {
+        pixels_per_mm: 2,
+        mm_per_pixel: 0.5,
+      },
+    },
+    pixelsPerMm: 2,
+    qualityFailed: false,
+    preparedPng: new Uint8Array([1, 2, 3]),
+    rectifiedPng: new Uint8Array([4, 5, 6]),
+    options: {
+      extract: true,
+      simplify_mm: 1,
+      min_piece_area_mm2: 10,
+      board_margin_mm: null,
+      smooth: true,
+    },
+    outline: {
+      svg: '<svg />',
+      dxf: '0',
+      json: {},
+      polygonMm: [
+        [0, 0],
+        [1200, 0],
+        [1200, 600],
+        [0, 600],
+      ],
+      metadata: {
+        vertex_count_raw: 4,
+        vertex_count_simplified: 4,
+        simplify_tolerance_mm: 1,
+        bounding_box_mm: [0, 0, 1200, 600],
+        area_mm2: 720000,
+        perimeter_mm: 3600,
+        segmentation: {
+          background_rgb: [255, 255, 255],
+          otsu_threshold: 128,
+          component_count: 1,
+          piece_area_mm2: 720000,
+          piece_pixel_count: 1000,
+        },
+      },
+      maskPng: new Uint8Array([7, 8, 9]),
+    },
+  };
 }
 
 describe('WorkspacePanel welcome flow', () => {
@@ -142,5 +243,48 @@ describe('WorkspacePanel loaded workspace regression', () => {
     expect(screen.getByText('pattern')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /replace image/i })).toBeInTheDocument();
+  });
+});
+
+describe('WorkspacePanel rectified viewport regression', () => {
+  it('renders rectified results inside a dedicated fit stage with centered overlays', () => {
+    usePipelineStore.setState({
+      fileName: 'pattern.jpg',
+      fileBytes: new Uint8Array([1, 2, 3]),
+      previewUrl: 'blob:preview-url',
+      rectifiedUrl: 'blob:rectified-url',
+      runStatus: 'success',
+      result: makeRectifyResult(),
+    });
+
+    const { container } = renderWorkspacePanel();
+
+    const stage = container.querySelector('.pd-rectified-stage');
+    const rectifiedImage = screen.getByAltText('rectified');
+    const overlay = stage?.querySelector('svg');
+
+    expect(stage).toBeInTheDocument();
+    expect(rectifiedImage).toHaveClass('pd-rectified-media');
+    expect(overlay).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
+  });
+
+  it('keeps the full rectified stage interactive while editing curves', () => {
+    usePipelineStore.setState({
+      fileName: 'pattern.jpg',
+      fileBytes: new Uint8Array([1, 2, 3]),
+      previewUrl: 'blob:preview-url',
+      rectifiedUrl: 'blob:rectified-url',
+      runStatus: 'success',
+      result: makeRectifyResult(),
+    });
+    useEditStore.getState().enterEdit(makeRectifyResult().outline!.polygonMm);
+
+    const { container } = renderWorkspacePanel();
+
+    const stage = container.querySelector('.pd-rectified-stage');
+    const overlay = container.querySelector('svg.pd-edit-overlay') as SVGElement | null;
+
+    expect(stage).toContainElement(overlay);
+    expect(overlay).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
   });
 });
