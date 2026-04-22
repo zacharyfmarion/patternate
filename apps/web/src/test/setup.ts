@@ -10,7 +10,8 @@ const pipelineActionDefaults = {
   setInput: usePipelineStore.getState().setInput,
   clearInput: usePipelineStore.getState().clearInput,
   run: usePipelineStore.getState().run,
-  rerunOutline: usePipelineStore.getState().rerunOutline,
+  resimplify: usePipelineStore.getState().resimplify,
+  patchOutlinePolygon: usePipelineStore.getState().patchOutlinePolygon,
   pushToast: usePipelineStore.getState().pushToast,
   clearToasts: usePipelineStore.getState().clearToasts,
 };
@@ -105,6 +106,7 @@ beforeEach(() => {
     rectifiedUrl: null,
     maskUrl: null,
     runProgress: [],
+    resimplifyStatus: 'idle',
     toasts: [],
     ...pipelineActionDefaults,
   });

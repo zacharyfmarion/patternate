@@ -93,6 +93,12 @@ function makeRectifyResult(): RectifyResult {
         [1200, 600],
         [0, 600],
       ],
+      rawPolygonMm: [
+        [0, 0],
+        [1200, 0],
+        [1200, 600],
+        [0, 600],
+      ],
       metadata: {
         vertex_count_raw: 4,
         vertex_count_simplified: 4,

@@ -8,7 +8,13 @@
  */
 
 import { WorkerEngine } from './workerEngine';
-import type { EngineBridge, RectifyOptions, RectifyProgressHandler } from './types';
+import type {
+  EngineBridge,
+  RectifyOptions,
+  RectifyProgressHandler,
+  SegmentationStats,
+  SimplifyOutlineResult,
+} from './types';
 
 export class TauriEngine implements EngineBridge {
   private worker: WorkerEngine;
@@ -32,6 +38,20 @@ export class TauriEngine implements EngineBridge {
     onProgress?: RectifyProgressHandler,
   ) {
     return this.worker.rectify(bytes, options, boardId, onProgress);
+  }
+
+  simplifyOutline(
+    rawPolygonMm: Array<[number, number]>,
+    simplifyMm: number,
+    segmentation: SegmentationStats,
+    vertexCountRaw: number,
+  ): Promise<SimplifyOutlineResult> {
+    return this.worker.simplifyOutline(
+      rawPolygonMm,
+      simplifyMm,
+      segmentation,
+      vertexCountRaw,
+    );
   }
 
   builtinBoardSpec(boardId: string) {
