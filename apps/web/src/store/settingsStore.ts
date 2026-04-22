@@ -13,7 +13,7 @@ export interface PipelineSettings {
 
 const DEFAULTS: PipelineSettings = {
   pixelsPerMm: 10,
-  simplifyMm: 0.3,
+  simplifyMm: 2,
   minPieceAreaMm2: 200,
   boardMarginMm: null,
   boardSpec: 'refboard_v1',

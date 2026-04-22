@@ -61,7 +61,7 @@ export function SettingsModal() {
               id="simplifyMm"
               type="number"
               min={0}
-              max={5}
+              max={10}
               step={0.1}
               value={settings.simplifyMm}
               onChange={(e) => set('simplifyMm', Number(e.target.value))}

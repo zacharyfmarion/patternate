@@ -228,6 +228,10 @@ textarea {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.dockview-theme-pattern-detector .dv-default-tab-action {
+  display: none;
+}
+
 .dockview-theme-pattern-detector
   .dv-split-view-container.dv-horizontal
   > .dv-sash-container
