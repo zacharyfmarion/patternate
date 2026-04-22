@@ -58,6 +58,7 @@ interface RunSlice {
   resimplifyStatus: 'idle' | 'running';
   run: () => Promise<void>;
   resimplify: (simplifyMm: number) => Promise<void>;
+  patchOutlinePolygon: (polygon: Array<[number, number]>) => void;
 }
 
 interface ToastSlice {
@@ -331,6 +332,17 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       }));
       get().pushToast('error', `Run failed: ${message}`);
     }
+  },
+  patchOutlinePolygon(polygon) {
+    set((state) => {
+      if (!state.result?.outline) return {};
+      return {
+        result: {
+          ...state.result,
+          outline: { ...state.result.outline, polygonMm: polygon },
+        },
+      };
+    });
   },
   async resimplify(simplifyMm: number) {
     const { result } = get();

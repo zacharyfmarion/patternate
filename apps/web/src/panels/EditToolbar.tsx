@@ -8,6 +8,7 @@ import {
   Check,
 } from 'lucide-react';
 
+import { flattenSpline } from '../edit/splinePath';
 import { useEditStore } from '../store/editStore';
 import { usePipelineStore } from '../store/pipelineStore';
 import { Button, IconButton } from '../components/ui';
@@ -18,13 +19,24 @@ export function EditToolbar() {
   const undo = useEditStore((s) => s.undo);
   const redo = useEditStore((s) => s.redo);
   const exitEdit = useEditStore((s) => s.exitEdit);
+  const spline = useEditStore((s) => s.spline);
+  const flattenToleranceMm = useEditStore((s) => s.flattenToleranceMm);
   const autoSmooth = useEditStore((s) => s.autoSmooth);
   const resetFromPolygon = useEditStore((s) => s.resetFromPolygon);
   const canUndo = useEditStore((s) => s.history.past.length > 0);
   const canRedo = useEditStore((s) => s.history.future.length > 0);
 
   const result = usePipelineStore((s) => s.result);
+  const patchOutlinePolygon = usePipelineStore((s) => s.patchOutlinePolygon);
   const polygon = result?.outline?.polygonMm;
+
+  function handleDone() {
+    if (spline) {
+      const flat = flattenSpline(spline, flattenToleranceMm) as Array<[number, number]>;
+      patchOutlinePolygon(flat);
+    }
+    exitEdit();
+  }
   const toolHint =
     activeTool === 'pen'
       ? 'Click a segment to add a point.'
@@ -114,7 +126,7 @@ export function EditToolbar() {
         type="button"
         variant="primary"
         className="gap-1.5"
-        onClick={exitEdit}
+        onClick={handleDone}
         title="Exit edit mode (keeps edits)"
       >
         <Check size={14} /> Done
