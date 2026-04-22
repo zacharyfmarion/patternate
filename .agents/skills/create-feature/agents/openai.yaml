@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Create Feature'
+  short_description: 'Take repo changes from prompt to PR'
+  default_prompt: 'Use $create-feature to plan, implement, validate, and open a PR for this repo change.'
