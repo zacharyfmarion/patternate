@@ -610,6 +610,70 @@ export function setNodeKind(
   };
 }
 
+/**
+ * Drag a bezier segment so that the on-curve point at parameter `t` moves by
+ * (dx, dy). Distributes the delta across the two adjacent handles using a
+ * least-squares weighting so that w1·d1 + w2·d2 = delta exactly.
+ *
+ * For linear segments (no handles), default tangent handles are synthesised
+ * first (1/6 of chord length, collinear with chord). During the drag both
+ * nodes are treated as 'corner' so opposing handles don't mirror.
+ */
+export function moveSegment(
+  path: SplinePath,
+  segmentIndex: number,
+  t: number,
+  dx: number,
+  dy: number,
+): SplinePath {
+  const n = path.nodes.length;
+  const aIdx = ((segmentIndex % n) + n) % n;
+  const bIdx = (aIdx + 1) % n;
+
+  const a = { ...path.nodes[aIdx] };
+  const b = { ...path.nodes[bIdx] };
+
+  // Synthesise default handles for linear segments.
+  if (a.handleOut === null && b.handleIn === null) {
+    const chordX = b.anchor[0] - a.anchor[0];
+    const chordY = b.anchor[1] - a.anchor[1];
+    a.handleOut = [a.anchor[0] + chordX / 3, a.anchor[1] + chordY / 3];
+    b.handleIn = [b.anchor[0] - chordX / 3, b.anchor[1] - chordY / 3];
+  } else if (a.handleOut === null) {
+    a.handleOut = [...a.anchor];
+  } else if (b.handleIn === null) {
+    b.handleIn = [...b.anchor];
+  }
+
+  // Basis weights for handleOut (P1) and handleIn (P2) at parameter t.
+  const mt = 1 - t;
+  const w1 = 3 * mt * mt * t;
+  const w2 = 3 * mt * t * t;
+  const denom = w1 * w1 + w2 * w2;
+  if (denom < 1e-12) return path;
+
+  const d1x = dx * w1 / denom;
+  const d1y = dy * w1 / denom;
+  const d2x = dx * w2 / denom;
+  const d2y = dy * w2 / denom;
+
+  const nextA: SplineNode = {
+    ...a,
+    kind: 'corner',
+    handleOut: [a.handleOut![0] + d1x, a.handleOut![1] + d1y],
+  };
+  const nextB: SplineNode = {
+    ...b,
+    kind: 'corner',
+    handleIn: [b.handleIn![0] + d2x, b.handleIn![1] + d2y],
+  };
+
+  const nextNodes = path.nodes.slice();
+  nextNodes[aIdx] = nextA;
+  nextNodes[bIdx] = nextB;
+  return { ...path, nodes: nextNodes };
+}
+
 export function removeNodes(path: SplinePath, ids: Set<string>): SplinePath {
   const next = path.nodes.filter((n) => !ids.has(n.id));
   return { ...path, nodes: next };

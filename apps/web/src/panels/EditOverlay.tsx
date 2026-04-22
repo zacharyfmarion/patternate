@@ -5,6 +5,7 @@ import {
   projectPointToSpline,
   splineToSvgPath,
   type Point,
+  type ProjectHit,
   type SplinePath,
 } from '../edit/splinePath';
 
@@ -23,10 +24,14 @@ interface Props {
 
 type DragState =
   | { kind: 'anchor'; ids: string[]; startClientX: number; startClientY: number }
+  | { kind: 'handle'; id: string; which: 'in' | 'out' }
+  | { kind: 'segment'; segmentIndex: number; t: number }
   | {
-      kind: 'handle';
-      id: string;
-      which: 'in' | 'out';
+      kind: 'marquee';
+      startClientX: number;
+      startClientY: number;
+      curClientX: number;
+      curClientY: number;
     }
   | null;
 
@@ -47,8 +52,10 @@ export function EditOverlay({
 
   const toggleSelection = useEditStore((s) => s.toggleSelection);
   const clearSelection = useEditStore((s) => s.clearSelection);
+  const setSelection = useEditStore((s) => s.setSelection);
   const moveNodes = useEditStore((s) => s.moveNodes);
   const moveHandle = useEditStore((s) => s.moveHandle);
+  const moveSegment = useEditStore((s) => s.moveSegment);
   const setNodeKind = useEditStore((s) => s.setNodeKind);
   const insertOnSegment = useEditStore((s) => s.insertOnSegment);
   const beginInteraction = useEditStore((s) => s.beginInteraction);
@@ -58,6 +65,9 @@ export function EditOverlay({
   const [dragging, setDragging] = useState<DragState>(null);
   const draggingRef = useRef<DragState>(null);
   draggingRef.current = dragging;
+
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [penHoverHit, setPenHoverHit] = useState<ProjectHit | null>(null);
 
   // -------------------------------------------------------------------------
   // Coordinate transforms
@@ -83,6 +93,28 @@ export function EditOverlay({
       return [originMm[0] + xPx / pxPerMm, originMm[1] + yPx / pxPerMm];
     },
     [widthPx, heightPx, originMm, pxPerMm],
+  );
+
+  // Convert a client-space rect to SVG viewBox space.
+  const clientRectToSvg = useCallback(
+    (x1: number, y1: number, x2: number, y2: number) => {
+      const svg = svgRef.current;
+      if (!svg) return { x: 0, y: 0, w: 0, h: 0 };
+      const rect = svg.getBoundingClientRect();
+      const scaleX = widthPx / rect.width;
+      const scaleY = heightPx / rect.height;
+      const sx1 = (x1 - rect.left) * scaleX;
+      const sy1 = (y1 - rect.top) * scaleY;
+      const sx2 = (x2 - rect.left) * scaleX;
+      const sy2 = (y2 - rect.top) * scaleY;
+      return {
+        x: Math.min(sx1, sx2),
+        y: Math.min(sy1, sy2),
+        w: Math.abs(sx2 - sx1),
+        h: Math.abs(sy2 - sy1),
+      };
+    },
+    [widthPx, heightPx],
   );
 
   // -------------------------------------------------------------------------
@@ -113,7 +145,6 @@ export function EditOverlay({
       e.stopPropagation();
       e.preventDefault();
       if (activeTool === 'pen') {
-        // Pen-click on a node toggles its kind (corner <-> smooth).
         if (!spline) return;
         const n = spline.nodes.find((x) => x.id === id);
         if (!n) return;
@@ -156,12 +187,42 @@ export function EditOverlay({
     [activeTool, beginInteraction],
   );
 
+  const onPointerDownSegment = useCallback(
+    (e: React.PointerEvent<SVGPathElement>) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (activeTool !== 'select' || !spline) return;
+      const mm = clientToMm(e.clientX, e.clientY);
+      const hit = projectPointToSpline(spline, mm);
+      if (!hit) return;
+      beginInteraction();
+      const next: DragState = { kind: 'segment', segmentIndex: hit.segmentIndex, t: hit.t };
+      setDragging(next);
+      (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+    },
+    [activeTool, beginInteraction, clientToMm, spline],
+  );
+
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       const d = draggingRef.current;
+
+      // Pen tool hover preview (no drag active).
+      if (!d && activeTool === 'pen' && spline) {
+        const mm = clientToMm(e.clientX, e.clientY);
+        const hit = projectPointToSpline(spline, mm);
+        if (hit && hit.distanceMm * pxPerMm <= penSnapPx) {
+          setPenHoverHit(hit);
+        } else {
+          setPenHoverHit(null);
+        }
+        return;
+      }
+
       if (!d) return;
+
       if (d.kind === 'anchor') {
         const last = lastPointerRef.current ?? {
           x: d.startClientX,
@@ -177,25 +238,72 @@ export function EditOverlay({
       } else if (d.kind === 'handle') {
         const [xMm, yMm] = clientToMm(e.clientX, e.clientY);
         moveHandle(d.id, d.which, xMm, yMm);
+      } else if (d.kind === 'segment') {
+        const last = lastPointerRef.current;
+        if (last) {
+          const scaleX = svgClientScale(svgRef.current, widthPx);
+          const scaleY = svgClientScaleY(svgRef.current, heightPx);
+          const dx = (e.clientX - last.x) / scaleX / pxPerMm;
+          const dy = (e.clientY - last.y) / scaleY / pxPerMm;
+          if (dx !== 0 || dy !== 0) {
+            moveSegment(d.segmentIndex, d.t, dx, dy);
+          }
+        }
+        lastPointerRef.current = { x: e.clientX, y: e.clientY };
+      } else if (d.kind === 'marquee') {
+        setDragging({
+          ...d,
+          curClientX: e.clientX,
+          curClientY: e.clientY,
+        });
       }
     },
-    [clientToMm, heightPx, moveHandle, moveNodes, pxPerMm, widthPx],
+    [activeTool, clientToMm, heightPx, moveHandle, moveNodes, moveSegment, penSnapPx, pxPerMm, spline, widthPx],
   );
 
   const endDrag = useCallback(() => {
-    if (!draggingRef.current) return;
-    commitInteraction();
+    const d = draggingRef.current;
+    if (!d) return;
+
+    if (d.kind === 'marquee' && spline) {
+      const { x, y, w, h } = clientRectToSvg(
+        d.startClientX,
+        d.startClientY,
+        d.curClientX,
+        d.curClientY,
+      );
+      // Convert SVG pixel rect to mm rect.
+      const minX = originMm[0] + x / pxPerMm;
+      const minY = originMm[1] + y / pxPerMm;
+      const maxX = minX + w / pxPerMm;
+      const maxY = minY + h / pxPerMm;
+      const inside = spline.nodes
+        .filter(
+          (n) =>
+            n.anchor[0] >= minX &&
+            n.anchor[0] <= maxX &&
+            n.anchor[1] >= minY &&
+            n.anchor[1] <= maxY,
+        )
+        .map((n) => n.id);
+      if (inside.length > 0) {
+        setSelection(inside);
+      } else {
+        clearSelection();
+      }
+    } else if (d.kind !== 'marquee') {
+      commitInteraction();
+    }
+
     setDragging(null);
     lastPointerRef.current = null;
-  }, [commitInteraction]);
+  }, [clearSelection, clientRectToSvg, commitInteraction, originMm, pxPerMm, setSelection, spline]);
 
   const onPointerUp = useCallback(() => endDrag(), [endDrag]);
   const onPointerCancel = useCallback(() => endDrag(), [endDrag]);
 
   const onBackgroundPointerDown = useCallback(
     (e: React.PointerEvent<SVGElement>) => {
-      // Clicks on the empty background cancel selection (select tool) or
-      // insert a node near the curve (pen tool).
       if (e.button !== 0) return;
       if (activeTool === 'pen' && spline) {
         const mm = clientToMm(e.clientX, e.clientY);
@@ -205,10 +313,42 @@ export function EditOverlay({
           return;
         }
       }
+      if (activeTool === 'select') {
+        // Start a marquee drag instead of immediately clearing selection.
+        const next: DragState = {
+          kind: 'marquee',
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+          curClientX: e.clientX,
+          curClientY: e.clientY,
+        };
+        setDragging(next);
+        (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+        return;
+      }
       clearSelection();
     },
     [activeTool, clearSelection, clientToMm, insertOnSegment, penSnapPx, pxPerMm, spline],
   );
+
+  // Clear pen preview when tool changes.
+  useEffect(() => {
+    setPenHoverHit(null);
+  }, [activeTool]);
+
+  // -------------------------------------------------------------------------
+  // Marquee rect in SVG space
+  // -------------------------------------------------------------------------
+
+  const marqueeRect = useMemo(() => {
+    if (!dragging || dragging.kind !== 'marquee') return null;
+    return clientRectToSvg(
+      dragging.startClientX,
+      dragging.startClientY,
+      dragging.curClientX,
+      dragging.curClientY,
+    );
+  }, [dragging, clientRectToSvg]);
 
   // -------------------------------------------------------------------------
   // Rendering
@@ -227,8 +367,9 @@ export function EditOverlay({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onPointerLeave={() => setPenHoverHit(null)}
     >
-      {/* Filled outline. Clicks fall through to background handler. */}
+      {/* Filled outline — not interactive. */}
       <path
         d={pathD}
         fill="rgba(240, 180, 0, 0.12)"
@@ -238,8 +379,22 @@ export function EditOverlay({
         pointerEvents="none"
       />
 
+      {/* Segment hit area — wide transparent stroke so you can grab the curve.
+          Only active in select mode; sits below handles/anchors in z-order. */}
+      {activeTool === 'select' ? (
+        <path
+          d={pathD}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={hitR * 2}
+          strokeLinejoin="round"
+          style={{ cursor: 'crosshair' }}
+          onPointerDown={onPointerDownSegment}
+        />
+      ) : null}
+
       {/* Handle lines for selected nodes */}
-      {renderHandleLines(spline, selectedSet, mmToPx, strokeW)}
+      {renderHandleLines(spline, selectedSet, mmToPx, strokeW, hitR, onPointerDownHandle)}
 
       {/* Handle dots for selected nodes */}
       {renderHandles(
@@ -248,6 +403,8 @@ export function EditOverlay({
         mmToPx,
         handleR,
         hitR,
+        hoveredId,
+        setHoveredId,
         onPointerDownHandle,
       )}
 
@@ -258,8 +415,38 @@ export function EditOverlay({
         mmToPx,
         nodeR,
         hitR,
+        hoveredId,
+        setHoveredId,
         onPointerDownAnchor,
       )}
+
+      {/* Pen tool: insertion point preview */}
+      {penHoverHit ? (
+        <circle
+          cx={mmToPx(penHoverHit.point)[0]}
+          cy={mmToPx(penHoverHit.point)[1]}
+          r={handleR * 1.5}
+          fill="white"
+          stroke="#4c9aff"
+          strokeWidth={strokeW * 1.5}
+          pointerEvents="none"
+        />
+      ) : null}
+
+      {/* Marquee selection rectangle */}
+      {marqueeRect ? (
+        <rect
+          x={marqueeRect.x}
+          y={marqueeRect.y}
+          width={marqueeRect.w}
+          height={marqueeRect.h}
+          fill="rgba(76, 154, 255, 0.08)"
+          stroke="rgba(76, 154, 255, 0.7)"
+          strokeWidth={strokeW}
+          strokeDasharray={`${strokeW * 4} ${strokeW * 3}`}
+          pointerEvents="none"
+        />
+      ) : null}
     </svg>
   );
 }
@@ -273,6 +460,8 @@ function renderHandleLines(
   selected: Set<string>,
   mmToPx: (p: Point) => Point,
   strokeW: number,
+  hitR: number,
+  onDown: (e: React.PointerEvent<SVGElement>, id: string, which: 'in' | 'out') => void,
 ): React.ReactNode {
   const lines: React.ReactNode[] = [];
   for (const node of spline.nodes) {
@@ -281,31 +470,43 @@ function renderHandleLines(
     if (node.handleIn) {
       const h = mmToPx(node.handleIn);
       lines.push(
-        <line
-          key={`${node.id}-hl-in`}
-          x1={a[0]}
-          y1={a[1]}
-          x2={h[0]}
-          y2={h[1]}
-          stroke="rgba(76, 154, 255, 0.8)"
-          strokeWidth={strokeW}
-          pointerEvents="none"
-        />,
+        <g key={`${node.id}-hl-in`}>
+          {/* Invisible wide hit area */}
+          <line
+            x1={a[0]} y1={a[1]} x2={h[0]} y2={h[1]}
+            stroke="transparent"
+            strokeWidth={hitR * 2}
+            style={{ cursor: 'grab' }}
+            onPointerDown={(e) => onDown(e, node.id, 'in')}
+          />
+          {/* Visible thin line */}
+          <line
+            x1={a[0]} y1={a[1]} x2={h[0]} y2={h[1]}
+            stroke="rgba(76, 154, 255, 0.8)"
+            strokeWidth={strokeW}
+            pointerEvents="none"
+          />
+        </g>,
       );
     }
     if (node.handleOut) {
       const h = mmToPx(node.handleOut);
       lines.push(
-        <line
-          key={`${node.id}-hl-out`}
-          x1={a[0]}
-          y1={a[1]}
-          x2={h[0]}
-          y2={h[1]}
-          stroke="rgba(76, 154, 255, 0.8)"
-          strokeWidth={strokeW}
-          pointerEvents="none"
-        />,
+        <g key={`${node.id}-hl-out`}>
+          <line
+            x1={a[0]} y1={a[1]} x2={h[0]} y2={h[1]}
+            stroke="transparent"
+            strokeWidth={hitR * 2}
+            style={{ cursor: 'grab' }}
+            onPointerDown={(e) => onDown(e, node.id, 'out')}
+          />
+          <line
+            x1={a[0]} y1={a[1]} x2={h[0]} y2={h[1]}
+            stroke="rgba(76, 154, 255, 0.8)"
+            strokeWidth={strokeW}
+            pointerEvents="none"
+          />
+        </g>,
       );
     }
   }
@@ -318,6 +519,8 @@ function renderHandles(
   mmToPx: (p: Point) => Point,
   r: number,
   hitR: number,
+  hoveredId: string | null,
+  setHoveredId: (id: string | null) => void,
   onDown: (
     e: React.PointerEvent<SVGElement>,
     id: string,
@@ -327,10 +530,15 @@ function renderHandles(
   const handles: React.ReactNode[] = [];
   for (const node of spline.nodes) {
     if (!selected.has(node.id)) continue;
+    const isHovered = hoveredId === node.id;
     if (node.handleIn) {
       const p = mmToPx(node.handleIn);
       handles.push(
-        <g key={`${node.id}-h-in`}>
+        <g
+          key={`${node.id}-h-in`}
+          onPointerEnter={() => setHoveredId(node.id)}
+          onPointerLeave={() => setHoveredId(null)}
+        >
           <circle
             cx={p[0]}
             cy={p[1]}
@@ -342,8 +550,8 @@ function renderHandles(
           <circle
             cx={p[0]}
             cy={p[1]}
-            r={r}
-            fill="#4c9aff"
+            r={isHovered ? r * 1.4 : r}
+            fill={isHovered ? '#6eb0ff' : '#4c9aff'}
             stroke="#ffffff"
             strokeWidth={1}
             pointerEvents="none"
@@ -354,7 +562,11 @@ function renderHandles(
     if (node.handleOut) {
       const p = mmToPx(node.handleOut);
       handles.push(
-        <g key={`${node.id}-h-out`}>
+        <g
+          key={`${node.id}-h-out`}
+          onPointerEnter={() => setHoveredId(node.id)}
+          onPointerLeave={() => setHoveredId(null)}
+        >
           <circle
             cx={p[0]}
             cy={p[1]}
@@ -366,8 +578,8 @@ function renderHandles(
           <circle
             cx={p[0]}
             cy={p[1]}
-            r={r}
-            fill="#4c9aff"
+            r={isHovered ? r * 1.4 : r}
+            fill={isHovered ? '#6eb0ff' : '#4c9aff'}
             stroke="#ffffff"
             strokeWidth={1}
             pointerEvents="none"
@@ -385,10 +597,13 @@ function renderAnchors(
   mmToPx: (p: Point) => Point,
   r: number,
   hitR: number,
+  hoveredId: string | null,
+  setHoveredId: (id: string | null) => void,
   onDown: (e: React.PointerEvent<SVGElement>, id: string) => void,
 ): React.ReactNode {
   return spline.nodes.map((node) => {
     const isSelected = selected.has(node.id);
+    const isHovered = hoveredId === node.id;
     const [x, y] = mmToPx(node.anchor);
     const fill =
       node.kind === 'corner'
@@ -396,12 +611,18 @@ function renderAnchors(
         : node.kind === 'symmetric'
           ? '#2fc98a'
           : '#ffffff';
-    const stroke = isSelected ? '#4c9aff' : '#111';
-    // Render corner nodes as squares, smooth/symmetric as circles.
+    const stroke = isSelected ? '#4c9aff' : isHovered ? '#8ac4ff' : '#111';
+    const displayR = isHovered && !isSelected ? r * 1.35 : r;
+
     if (node.kind === 'corner') {
-      const half = r;
+      const half = displayR;
       return (
-        <g key={node.id} data-node-id={node.id}>
+        <g
+          key={node.id}
+          data-node-id={node.id}
+          onPointerEnter={() => setHoveredId(node.id)}
+          onPointerLeave={() => setHoveredId(null)}
+        >
           <rect
             x={x - hitR}
             y={y - hitR}
@@ -425,7 +646,12 @@ function renderAnchors(
       );
     }
     return (
-      <g key={node.id} data-node-id={node.id}>
+      <g
+        key={node.id}
+        data-node-id={node.id}
+        onPointerEnter={() => setHoveredId(node.id)}
+        onPointerLeave={() => setHoveredId(null)}
+      >
         <circle
           cx={x}
           cy={y}
@@ -437,7 +663,7 @@ function renderAnchors(
         <circle
           cx={x}
           cy={y}
-          r={r}
+          r={displayR}
           fill={fill}
           stroke={stroke}
           strokeWidth={isSelected ? 2 : 1}

@@ -260,7 +260,7 @@ function WelcomeSamples({
       <div className="pd-welcome-section-header">
         <div>
           <h3 className="pd-welcome-section-title">{title}</h3>
-          <p className="pd-welcome-section-copy">Load a known-good image without leaving the empty state.</p>
+          <p className="pd-welcome-section-copy">Load an example image to see how it works</p>
         </div>
       </div>
       <div className="pd-sample-grid pd-sample-grid-compact" role="list" aria-label={title}>
@@ -489,10 +489,8 @@ function StreamlinedWelcome({
       <div className="pd-welcome-header">
         <div>
           <div className="pd-welcome-eyebrow">Quick Start</div>
-          <h2 className="pd-welcome-title">Drop in a photo and let the app run.</h2>
           <p className="pd-welcome-copy">
-            If you already know the setup, this is the fast path. You can always reopen the guide
-            if you want the step-by-step version again.
+            You can always reopen the guide if you want the step-by-step version again.
           </p>
         </div>
         <div className="pd-row">

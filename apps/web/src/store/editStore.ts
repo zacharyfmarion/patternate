@@ -5,6 +5,7 @@ import {
   autoSmoothSpline,
   moveHandle as splineMoveHandle,
   moveNode as splineMoveNode,
+  moveSegment as splineMoveSegment,
   polygonToSpline,
   removeNodes as splineRemoveNodes,
   setNodeKind as splineSetNodeKind,
@@ -42,6 +43,7 @@ interface EditStoreActions {
 
   moveNodes: (ids: string[], dx: number, dy: number) => void;
   moveHandle: (id: string, which: 'in' | 'out', x: number, y: number) => void;
+  moveSegment: (segmentIndex: number, t: number, dx: number, dy: number) => void;
   setNodeKind: (id: string, kind: NodeKind) => void;
   insertOnSegment: (segmentIndex: number, t: number) => void;
   deleteSelected: () => void;
@@ -176,6 +178,13 @@ export const useEditStore = create<EditStore>()(
         const { spline } = get();
         if (!spline) return;
         const next = splineMoveHandle(spline, id, which, x, y);
+        set({ spline: next, dirty: true });
+      },
+
+      moveSegment(segmentIndex, t, dx, dy) {
+        const { spline } = get();
+        if (!spline) return;
+        const next = splineMoveSegment(spline, segmentIndex, t, dx, dy);
         set({ spline: next, dirty: true });
       },
 
