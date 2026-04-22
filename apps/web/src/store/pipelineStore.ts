@@ -263,6 +263,11 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       const preparedUrl = pngBlobUrl(result.preparedPng);
       const rectifiedUrl = pngBlobUrl(result.rectifiedPng);
       const maskUrl = result.outline ? pngBlobUrl(result.outline.maskPng) : null;
+
+      // Release large PNG buffers — blob URLs cover display and export
+      result.preparedPng = new Uint8Array(0);
+      result.rectifiedPng = new Uint8Array(0);
+      if (result.outline) result.outline.maskPng = new Uint8Array(0);
       const finalizedProgress = setProgressStep(
         get().runProgress.length > 0 ? get().runProgress : createRunProgress(),
         'finalize_results',
@@ -355,6 +360,12 @@ export const usePipelineStore = create<PipelineState>()(
       ...createRunSlice(...args),
       ...createToastSlice(...args),
     }),
-    { name: 'pattern-detector/pipeline' },
+    {
+      name: 'pattern-detector/pipeline',
+      serialize: {
+        replacer: (_key: string, value: unknown) =>
+          value instanceof Uint8Array ? `[Uint8Array(${value.byteLength})]` : value,
+      },
+    },
   ),
 );

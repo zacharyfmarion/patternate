@@ -44,6 +44,15 @@ function download(filename: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+function downloadUrl(filename: string, url: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 function Section({
   title,
   children,
@@ -151,6 +160,8 @@ function ExportButtons({
   result: RectifyResult;
 }) {
   const pushToast = usePipelineStore((s) => s.pushToast);
+  const rectifiedUrl = usePipelineStore((s) => s.rectifiedUrl);
+  const maskUrl = usePipelineStore((s) => s.maskUrl);
   const outline = result.outline;
   if (!outline) return null;
   const base = baseName(fileName);
@@ -215,11 +226,10 @@ function ExportButtons({
           size="sm"
           className="gap-1"
           onClick={() => {
-            download(
-              `${base}_rectified.png`,
-              new Blob([result.rectifiedPng as BlobPart], { type: 'image/png' }),
-            );
-            done(`${base}_rectified.png`);
+            if (rectifiedUrl) {
+              downloadUrl(`${base}_rectified.png`, rectifiedUrl);
+              done(`${base}_rectified.png`);
+            }
           }}
         >
           <Download size={12} /> Rectified PNG
@@ -230,11 +240,10 @@ function ExportButtons({
           size="sm"
           className="gap-1"
           onClick={() => {
-            download(
-              `${base}_mask.png`,
-              new Blob([outline.maskPng as BlobPart], { type: 'image/png' }),
-            );
-            done(`${base}_mask.png`);
+            if (maskUrl) {
+              downloadUrl(`${base}_mask.png`, maskUrl);
+              done(`${base}_mask.png`);
+            }
           }}
         >
           <Download size={12} /> Mask PNG

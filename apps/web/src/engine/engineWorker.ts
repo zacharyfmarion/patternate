@@ -73,28 +73,36 @@ const api = {
         : undefined,
     ) as Record<string, unknown>;
     const outline = raw.outline as Record<string, unknown> | null | undefined;
-    return {
+    const preparedPng = raw.preparedPng as Uint8Array;
+    const rectifiedPng = raw.rectifiedPng as Uint8Array;
+    const outlineResult = outline
+      ? {
+          svg: outline.svg as string,
+          dxf: outline.dxf as string,
+          json: outline.json,
+          polygonMm: outline.polygonMm as Array<[number, number]>,
+          metadata: outline.metadata as RectifyResult['outline'] extends null
+            ? never
+            : NonNullable<RectifyResult['outline']>['metadata'],
+          maskPng: outline.maskPng as Uint8Array,
+        }
+      : null;
+
+    const result: RectifyResult = {
       detection: raw.detection as RectifyResult['detection'],
       quality: raw.quality as RectifyResult['quality'],
       metadata: raw.metadata as RectifyResult['metadata'],
       pixelsPerMm: raw.pixelsPerMm as number,
       qualityFailed: raw.qualityFailed as boolean,
-      preparedPng: raw.preparedPng as Uint8Array,
-      rectifiedPng: raw.rectifiedPng as Uint8Array,
+      preparedPng,
+      rectifiedPng,
       options: raw.options as RectifyResult['options'],
-      outline: outline
-        ? {
-            svg: outline.svg as string,
-            dxf: outline.dxf as string,
-            json: outline.json,
-            polygonMm: outline.polygonMm as Array<[number, number]>,
-            metadata: outline.metadata as RectifyResult['outline'] extends null
-              ? never
-              : NonNullable<RectifyResult['outline']>['metadata'],
-            maskPng: outline.maskPng as Uint8Array,
-          }
-        : null,
+      outline: outlineResult,
     };
+
+    const transferables: Transferable[] = [preparedPng.buffer, rectifiedPng.buffer];
+    if (outlineResult) transferables.push(outlineResult.maskPng.buffer);
+    return Comlink.transfer(result, transferables);
   },
 };
 
