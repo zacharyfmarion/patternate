@@ -24,4 +24,4 @@ Adapt the repo-local `create-feature` skill from `openscad-studio` and `cascade`
 - [x] Add the adapted repo-local `create-feature` skill and metadata
 - [x] Add a PR template that matches the skill handoff flow
 - [x] Run validation appropriate for this change
-- [ ] Commit, push, and open a PR against `main`
+- [x] Commit, push, and open a PR against `main`
