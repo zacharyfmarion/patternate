@@ -25,7 +25,7 @@ interface Props {
 type DragState =
   | { kind: 'anchor'; ids: string[]; startClientX: number; startClientY: number }
   | { kind: 'handle'; id: string; which: 'in' | 'out' }
-  | { kind: 'segment'; segmentIndex: number; t: number }
+  | { kind: 'segment'; segmentIndex: number; t: number; interactionStarted: boolean }
   | {
       kind: 'marquee';
       startClientX: number;
@@ -178,13 +178,24 @@ export function EditOverlay({
     ) => {
       e.stopPropagation();
       e.preventDefault();
-      if (activeTool !== 'select') return;
       beginInteraction();
       const next: DragState = { kind: 'handle', id, which };
       setDragging(next);
       (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
     },
-    [activeTool, beginInteraction],
+    [beginInteraction],
+  );
+
+  const onDoubleClickSegment = useCallback(
+    (e: React.MouseEvent<SVGPathElement>) => {
+      e.stopPropagation();
+      if (activeTool !== 'select' || !spline) return;
+      const mm = clientToMm(e.clientX, e.clientY);
+      const hit = projectPointToSpline(spline, mm);
+      if (!hit) return;
+      insertOnSegment(hit.segmentIndex, hit.t);
+    },
+    [activeTool, clientToMm, insertOnSegment, spline],
   );
 
   const onPointerDownSegment = useCallback(
@@ -195,8 +206,9 @@ export function EditOverlay({
       const mm = clientToMm(e.clientX, e.clientY);
       const hit = projectPointToSpline(spline, mm);
       if (!hit) return;
-      beginInteraction();
-      const next: DragState = { kind: 'segment', segmentIndex: hit.segmentIndex, t: hit.t };
+      // beginInteraction is deferred to the first actual pointer move so that
+      // a plain click (no drag) doesn't create a spurious undo entry.
+      const next: DragState = { kind: 'segment', segmentIndex: hit.segmentIndex, t: hit.t, interactionStarted: false };
       setDragging(next);
       (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
     },
@@ -246,6 +258,10 @@ export function EditOverlay({
           const dx = (e.clientX - last.x) / scaleX / pxPerMm;
           const dy = (e.clientY - last.y) / scaleY / pxPerMm;
           if (dx !== 0 || dy !== 0) {
+            if (!d.interactionStarted) {
+              beginInteraction();
+              setDragging({ ...d, interactionStarted: true });
+            }
             moveSegment(d.segmentIndex, d.t, dx, dy);
           }
         }
@@ -291,6 +307,8 @@ export function EditOverlay({
       } else {
         clearSelection();
       }
+    } else if (d.kind === 'segment') {
+      if (d.interactionStarted) commitInteraction();
     } else if (d.kind !== 'marquee') {
       commitInteraction();
     }
@@ -390,6 +408,7 @@ export function EditOverlay({
           strokeLinejoin="round"
           style={{ cursor: 'crosshair' }}
           onPointerDown={onPointerDownSegment}
+          onDoubleClick={onDoubleClickSegment}
         />
       ) : null}
 
