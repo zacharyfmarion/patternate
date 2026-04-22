@@ -317,7 +317,7 @@ function SimplifyControl() {
       <input
         type="range"
         min={0}
-        max={3}
+        max={10}
         step={0.05}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
