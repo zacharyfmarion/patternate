@@ -11,7 +11,7 @@ const pipelineActionDefaults = {
   clearInput: usePipelineStore.getState().clearInput,
   run: usePipelineStore.getState().run,
   resimplify: usePipelineStore.getState().resimplify,
-  patchOutlinePolygon: usePipelineStore.getState().patchOutlinePolygon,
+  patchOutlineSpline: usePipelineStore.getState().patchOutlineSpline,
   pushToast: usePipelineStore.getState().pushToast,
   clearToasts: usePipelineStore.getState().clearToasts,
 };
@@ -66,6 +66,7 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
   writable: true,
   value: vi.fn(() => ({
     clearRect: vi.fn(),
+    fillRect: vi.fn(),
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
@@ -74,6 +75,11 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     fill: vi.fn(),
     arc: vi.fn(),
   })),
+});
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
+  writable: true,
+  value: vi.fn((callback: BlobCallback) => callback(new Blob([new Uint8Array([1])] as BlobPart[]))),
 });
 
 if (!SVGElement.prototype.setPointerCapture) {
@@ -102,6 +108,7 @@ beforeEach(() => {
     runStatus: 'idle',
     runError: null,
     result: null,
+    editedOutline: null,
     preparedUrl: null,
     rectifiedUrl: null,
     maskUrl: null,

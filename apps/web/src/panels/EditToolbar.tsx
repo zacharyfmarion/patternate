@@ -8,7 +8,6 @@ import {
   Check,
 } from 'lucide-react';
 
-import { flattenSpline } from '../edit/splinePath';
 import { useEditStore } from '../store/editStore';
 import { usePipelineStore } from '../store/pipelineStore';
 import { Button, IconButton } from '../components/ui';
@@ -27,13 +26,12 @@ export function EditToolbar() {
   const canRedo = useEditStore((s) => s.history.future.length > 0);
 
   const result = usePipelineStore((s) => s.result);
-  const patchOutlinePolygon = usePipelineStore((s) => s.patchOutlinePolygon);
+  const patchOutlineSpline = usePipelineStore((s) => s.patchOutlineSpline);
   const polygon = result?.outline?.polygonMm;
 
   function handleDone() {
     if (spline) {
-      const flat = flattenSpline(spline, flattenToleranceMm) as Array<[number, number]>;
-      patchOutlinePolygon(flat);
+      patchOutlineSpline(spline, flattenToleranceMm);
     }
     exitEdit();
   }

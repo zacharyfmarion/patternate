@@ -149,7 +149,7 @@ export function InspectorPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Standard (non-edit) exports — uses Rust-provided strings.
+// Standard exports use Rust output until an edited spline has been committed.
 // ---------------------------------------------------------------------------
 
 function ExportButtons({
@@ -162,6 +162,7 @@ function ExportButtons({
   const pushToast = usePipelineStore((s) => s.pushToast);
   const rectifiedUrl = usePipelineStore((s) => s.rectifiedUrl);
   const maskUrl = usePipelineStore((s) => s.maskUrl);
+  const editedOutline = usePipelineStore((s) => s.editedOutline);
   const outline = result.outline;
   if (!outline) return null;
   const base = baseName(fileName);
@@ -179,7 +180,13 @@ function ExportButtons({
           size="sm"
           className="gap-1"
           onClick={() => {
-            download(`${base}.svg`, new Blob([outline.svg], { type: 'image/svg+xml' }));
+            const content = editedOutline
+              ? exportSvg(
+                  editedOutline.spline,
+                  computeExportBbox(editedOutline.spline, editedOutline.flattenToleranceMm),
+                )
+              : outline.svg;
+            download(`${base}.svg`, new Blob([content], { type: 'image/svg+xml' }));
             done(`${base}.svg`);
           }}
         >
@@ -191,7 +198,14 @@ function ExportButtons({
           size="sm"
           className="gap-1"
           onClick={() => {
-            download(`${base}.dxf`, new Blob([outline.dxf], { type: 'application/dxf' }));
+            const content = editedOutline
+              ? exportDxf(
+                  editedOutline.spline,
+                  computeExportBbox(editedOutline.spline, editedOutline.flattenToleranceMm),
+                  editedOutline.flattenToleranceMm,
+                )
+              : outline.dxf;
+            download(`${base}.dxf`, new Blob([content], { type: 'application/dxf' }));
             done(`${base}.dxf`);
           }}
         >
@@ -203,11 +217,18 @@ function ExportButtons({
           size="sm"
           className="gap-1"
           onClick={() => {
+            const editedJson = editedOutline
+              ? exportJson(
+                  editedOutline.spline,
+                  computeExportBbox(editedOutline.spline, editedOutline.flattenToleranceMm),
+                  editedOutline.flattenToleranceMm,
+                )
+              : null;
             const payload = {
               metadata: result.metadata,
               quality: result.quality,
-              outline: outline.json,
-              polygon_mm: outline.polygonMm,
+              outline: editedJson ?? outline.json,
+              polygon_mm: editedJson?.polygon_mm ?? outline.polygonMm,
             };
             download(
               `${base}.json`,
@@ -240,7 +261,28 @@ function ExportButtons({
           size="sm"
           className="gap-1"
           onClick={() => {
-            if (maskUrl) {
+            if (editedOutline) {
+              const bbox = computeExportBbox(
+                editedOutline.spline,
+                editedOutline.flattenToleranceMm,
+              );
+              exportMaskPng(
+                editedOutline.spline,
+                bbox,
+                result.pixelsPerMm,
+                editedOutline.flattenToleranceMm,
+              )
+                .then((bytes) => {
+                  download(
+                    `${base}_mask.png`,
+                    new Blob([bytes as BlobPart], { type: 'image/png' }),
+                  );
+                  done(`${base}_mask.png`);
+                })
+                .catch((err) => {
+                  pushToast('error', `Mask export failed: ${String(err)}`);
+                });
+            } else if (maskUrl) {
               downloadUrl(`${base}_mask.png`, maskUrl);
               done(`${base}_mask.png`);
             }
@@ -399,6 +441,7 @@ function InspectorEditMode({
   const autoSmooth = useEditStore((s) => s.autoSmooth);
   const resetFromPolygon = useEditStore((s) => s.resetFromPolygon);
   const exitEdit = useEditStore((s) => s.exitEdit);
+  const patchOutlineSpline = usePipelineStore((s) => s.patchOutlineSpline);
 
   const polygon = result?.outline?.polygonMm ?? null;
 
@@ -465,6 +508,13 @@ function InspectorEditMode({
     } catch (err) {
       pushToast('error', `Export failed: ${String(err)}`);
     }
+  }
+
+  function finishEditing() {
+    if (spline) {
+      patchOutlineSpline(spline, flattenTol);
+    }
+    exitEdit();
   }
 
   const outlineStats = useMemo(() => {
@@ -605,7 +655,7 @@ function InspectorEditMode({
       </Section>
 
       <div className="pd-row" style={{ gap: 6 }}>
-        <Button type="button" variant="secondary" onClick={exitEdit}>
+        <Button type="button" variant="secondary" onClick={finishEditing}>
           Done
         </Button>
       </div>

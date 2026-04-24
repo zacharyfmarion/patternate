@@ -7,6 +7,13 @@ import type {
   RectifyProgressStep,
   RectifyResult,
 } from '../engine/types';
+import {
+  computeExportBbox,
+  exportDxf,
+  exportJson,
+  exportSvg,
+} from '../export/exporters';
+import type { SplinePath } from '../edit/splinePath';
 import { getEngine } from '../engine';
 import { useSettingsStore } from './settingsStore';
 import { useEditStore } from './editStore';
@@ -51,6 +58,7 @@ interface RunSlice {
   runStatus: RunStatus;
   runError: string | null;
   result: RectifyResult | null;
+  editedOutline: { spline: SplinePath; flattenToleranceMm: number } | null;
   preparedUrl: string | null;
   rectifiedUrl: string | null;
   maskUrl: string | null;
@@ -58,7 +66,7 @@ interface RunSlice {
   resimplifyStatus: 'idle' | 'running';
   run: () => Promise<void>;
   resimplify: (simplifyMm: number) => Promise<void>;
-  patchOutlinePolygon: (polygon: Array<[number, number]>) => void;
+  patchOutlineSpline: (spline: SplinePath, flattenToleranceMm: number) => void;
 }
 
 interface ToastSlice {
@@ -183,6 +191,7 @@ const createInputSlice: StateCreator<PipelineState, [], [], InputSlice> = (set, 
       runStatus: 'idle',
       runError: null,
       result: null,
+      editedOutline: null,
       preparedUrl: null,
       rectifiedUrl: null,
       maskUrl: null,
@@ -202,6 +211,7 @@ const createInputSlice: StateCreator<PipelineState, [], [], InputSlice> = (set, 
       runStatus: 'idle',
       runError: null,
       result: null,
+      editedOutline: null,
       preparedUrl: null,
       rectifiedUrl: null,
       maskUrl: null,
@@ -214,6 +224,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
   runStatus: 'idle',
   runError: null,
   result: null,
+  editedOutline: null,
   preparedUrl: null,
   rectifiedUrl: null,
   maskUrl: null,
@@ -233,6 +244,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       runStatus: 'running',
       runError: null,
       result: null,
+      editedOutline: null,
       preparedUrl: null,
       rectifiedUrl: null,
       maskUrl: null,
@@ -287,6 +299,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
           runStatus: 'error',
           runError: result.quality.warnings.join('; ') || 'Quality check failed',
           result,
+          editedOutline: null,
           preparedUrl,
           rectifiedUrl: null,
           maskUrl: null,
@@ -302,6 +315,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       set({
         runStatus: 'success',
         result,
+        editedOutline: null,
         preparedUrl,
         rectifiedUrl,
         maskUrl,
@@ -333,13 +347,36 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       get().pushToast('error', `Run failed: ${message}`);
     }
   },
-  patchOutlinePolygon(polygon) {
+  patchOutlineSpline(spline, flattenToleranceMm) {
     set((state) => {
       if (!state.result?.outline) return {};
+      const bbox = computeExportBbox(spline, flattenToleranceMm);
+      const json = exportJson(spline, bbox, flattenToleranceMm);
+      const polygon = json.polygon_mm as Array<[number, number]>;
+      const metadata = {
+        ...state.result.outline.metadata,
+        vertex_count_simplified: polygon.length,
+        simplify_tolerance_mm: flattenToleranceMm,
+        bounding_box_mm: json.bounding_box_mm,
+        area_mm2: json.area_mm2,
+        perimeter_mm: json.perimeter_mm,
+      };
       return {
+        editedOutline: { spline, flattenToleranceMm },
         result: {
           ...state.result,
-          outline: { ...state.result.outline, polygonMm: polygon },
+          metadata: {
+            ...state.result.metadata,
+            outline: metadata,
+          },
+          outline: {
+            ...state.result.outline,
+            svg: exportSvg(spline, bbox),
+            dxf: exportDxf(spline, bbox, flattenToleranceMm),
+            json,
+            polygonMm: polygon,
+            metadata,
+          },
         },
       };
     });
@@ -364,6 +401,7 @@ const createRunSlice: StateCreator<PipelineState, [], [], RunSlice> = (set, get)
       set((state) => {
         if (!state.result?.outline) return {};
         return {
+          editedOutline: null,
           result: {
             ...state.result,
             metadata: {

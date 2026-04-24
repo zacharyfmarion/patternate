@@ -26,11 +26,11 @@
 use anyhow::{Context, Result, anyhow};
 use image::{GrayImage, Luma, RgbImage};
 use imageproc::{
-    contrast::{otsu_level, threshold, ThresholdType},
+    contrast::{ThresholdType, otsu_level, threshold},
     definitions::Image,
     distance_transform::Norm,
     morphology::{close_mut, open_mut},
-    region_labelling::{connected_components, Connectivity},
+    region_labelling::{Connectivity, connected_components},
 };
 
 use crate::homography::RectifiedBounds;
@@ -244,15 +244,11 @@ pub fn segment_piece_with_validity(
 
     // Flatten smooth lighting variation on the refined background area
     // (without the piece contaminating the luminance field).
-    let normalised_image = normalise_illumination(
-        image,
-        &exclusion_pass2,
-        opts.pixels_per_mm,
-        180.0,
-    );
+    let normalised_image =
+        normalise_illumination(image, &exclusion_pass2, opts.pixels_per_mm, 180.0);
 
-    let background = robust_background_color(&normalised_image, &exclusion_pass2)
-        .unwrap_or(background1);
+    let background =
+        robust_background_color(&normalised_image, &exclusion_pass2).unwrap_or(background1);
 
     // Per-pixel foreground score: combine absolute RGB distance with a
     // chromaticity (normalised-RGB) distance and take the MIN.
@@ -313,7 +309,8 @@ pub fn segment_piece_with_validity(
     let labels: Image<Luma<u32>> =
         connected_components(&foreground, Connectivity::Four, Luma([0u8]));
 
-    let chosen = choose_piece_component(&labels, &exclusion, opts, image.width(), image.height())?;
+    let board_rect = board_exclusion_rect_px(image.width(), image.height(), opts);
+    let chosen = choose_piece_component(&labels, board_rect, opts, image.width(), image.height())?;
 
     let mut piece_mask = GrayImage::from_pixel(image.width(), image.height(), Luma([0u8]));
     for y in 0..labels.height() {
@@ -442,9 +439,15 @@ fn flood_fill_board_paper(
     let outer_offset_mm = margin + 3.0;
     let outer_seeds_mm: [(f64, f64); 4] = [
         (opts.board_width_mm * 0.5, -outer_offset_mm),
-        (opts.board_width_mm * 0.5, opts.board_height_mm + outer_offset_mm),
+        (
+            opts.board_width_mm * 0.5,
+            opts.board_height_mm + outer_offset_mm,
+        ),
         (-outer_offset_mm, opts.board_height_mm * 0.5),
-        (opts.board_width_mm + outer_offset_mm, opts.board_height_mm * 0.5),
+        (
+            opts.board_width_mm + outer_offset_mm,
+            opts.board_height_mm * 0.5,
+        ),
     ];
 
     // Tolerance: how far from paper colour a pixel can drift and still
@@ -486,7 +489,11 @@ fn flood_fill_board_paper(
     let mut queue: std::collections::VecDeque<(u32, u32)> =
         std::collections::VecDeque::with_capacity(1024);
 
-    let push_seed = |sx: u32, sy: u32, visited: &mut [bool], queue: &mut std::collections::VecDeque<(u32, u32)>, exclusion: &GrayImage| {
+    let push_seed = |sx: u32,
+                     sy: u32,
+                     visited: &mut [bool],
+                     queue: &mut std::collections::VecDeque<(u32, u32)>,
+                     exclusion: &GrayImage| {
         let idx = (sy * w + sx) as usize;
         if visited[idx] {
             return;
@@ -604,8 +611,11 @@ fn sample_3x3_mean(image: &RgbImage, x: u32, y: u32) -> Option<[f64; 3]> {
 }
 
 fn median_rgb(samples: &[[f64; 3]]) -> [u8; 3] {
-    let mut per_channel: [Vec<f64>; 3] =
-        [Vec::with_capacity(samples.len()), Vec::with_capacity(samples.len()), Vec::with_capacity(samples.len())];
+    let mut per_channel: [Vec<f64>; 3] = [
+        Vec::with_capacity(samples.len()),
+        Vec::with_capacity(samples.len()),
+        Vec::with_capacity(samples.len()),
+    ];
     for s in samples {
         per_channel[0].push(s[0]);
         per_channel[1].push(s[1]);
@@ -651,6 +661,22 @@ fn neighbors4(x: u32, y: u32, w: u32, h: u32) -> impl Iterator<Item = (u32, u32)
 fn build_board_exclusion_mask(width: u32, height: u32, opts: &SegmentationOptions) -> GrayImage {
     let mut mask = GrayImage::from_pixel(width, height, Luma([0u8]));
 
+    if let Some(rect) = board_exclusion_rect_px(width, height, opts) {
+        for y in rect.min_y..rect.max_y {
+            for x in rect.min_x..rect.max_x {
+                mask.put_pixel(x, y, Luma([255]));
+            }
+        }
+    }
+
+    mask
+}
+
+fn board_exclusion_rect_px(
+    width: u32,
+    height: u32,
+    opts: &SegmentationOptions,
+) -> Option<PixelRect> {
     let ppm = opts.pixels_per_mm;
     let min_x_mm = opts.bounds.min_x_mm;
     let min_y_mm = opts.bounds.min_y_mm;
@@ -667,13 +693,16 @@ fn build_board_exclusion_mask(width: u32, height: u32, opts: &SegmentationOption
     let x1 = bx1.clamp(0.0, width as f64) as u32;
     let y1 = by1.clamp(0.0, height as f64) as u32;
 
-    for y in y0..y1 {
-        for x in x0..x1 {
-            mask.put_pixel(x, y, Luma([255]));
-        }
+    if x0 >= x1 || y0 >= y1 {
+        return None;
     }
 
-    mask
+    Some(PixelRect {
+        min_x: x0,
+        min_y: y0,
+        max_x: x1,
+        max_y: y1,
+    })
 }
 
 fn robust_background_color(image: &RgbImage, exclusion: &GrayImage) -> Option<[u8; 3]> {
@@ -991,7 +1020,7 @@ struct Candidate {
 
 fn choose_piece_component(
     labels: &Image<Luma<u32>>,
-    exclusion: &GrayImage,
+    board_rect: Option<PixelRect>,
     opts: &SegmentationOptions,
     img_w: u32,
     img_h: u32,
@@ -1016,17 +1045,23 @@ fn choose_piece_component(
             }
             let i = lbl as usize;
             counts[i] += 1;
-            if x < min_x[i] { min_x[i] = x; }
-            if y < min_y[i] { min_y[i] = y; }
-            if x > max_x[i] { max_x[i] = x; }
-            if y > max_y[i] { max_y[i] = y; }
+            if x < min_x[i] {
+                min_x[i] = x;
+            }
+            if y < min_y[i] {
+                min_y[i] = y;
+            }
+            if x > max_x[i] {
+                max_x[i] = x;
+            }
+            if y > max_y[i] {
+                max_y[i] = y;
+            }
             if x == 0 || y == 0 || x + 1 == img_w || y + 1 == img_h {
                 border[i] += 1;
             }
         }
     }
-
-    let excl_bbox = exclusion_bbox(exclusion);
 
     let px_per_mm2 = opts.pixels_per_mm * opts.pixels_per_mm;
     let min_pixels = (opts.min_piece_area_mm2 * px_per_mm2).ceil() as u32;
@@ -1048,14 +1083,16 @@ fn choose_piece_component(
             max_x: max_x[i] + 1,
             max_y: max_y[i] + 1,
         };
-        // Reject components whose bbox fully contains the board exclusion
-        // rectangle: those are almost always the board's paper wrapper,
-        // not the pattern piece.
-        if let Some(eb) = excl_bbox {
-            if bbox.min_x <= eb.min_x
-                && bbox.min_y <= eb.min_y
-                && bbox.max_x >= eb.max_x
-                && bbox.max_y >= eb.max_y
+        // Reject components whose bbox fully contains the known reference
+        // board footprint. Those are almost always the board's surrounding
+        // printout paper, not the pattern piece. Keep this tied to the board
+        // rect itself, not the combined exclusion mask: warp-invalid pixels
+        // are also excluded and can make that mask's bbox span the full image.
+        if let Some(br) = board_rect {
+            if bbox.min_x <= br.min_x
+                && bbox.min_y <= br.min_y
+                && bbox.max_x >= br.max_x
+                && bbox.max_y >= br.max_y
             {
                 continue;
             }
@@ -1080,34 +1117,6 @@ fn choose_piece_component(
             opts.max_border_fraction,
             max_label
         )
-    })
-}
-
-fn exclusion_bbox(exclusion: &GrayImage) -> Option<PixelRect> {
-    let mut min_x = u32::MAX;
-    let mut min_y = u32::MAX;
-    let mut max_x = 0u32;
-    let mut max_y = 0u32;
-    let mut any = false;
-    for y in 0..exclusion.height() {
-        for x in 0..exclusion.width() {
-            if exclusion.get_pixel(x, y).0[0] != 0 {
-                any = true;
-                if x < min_x { min_x = x; }
-                if y < min_y { min_y = y; }
-                if x > max_x { max_x = x; }
-                if y > max_y { max_y = y; }
-            }
-        }
-    }
-    if !any {
-        return None;
-    }
-    Some(PixelRect {
-        min_x,
-        min_y,
-        max_x: max_x + 1,
-        max_y: max_y + 1,
     })
 }
 
@@ -1152,9 +1161,9 @@ mod tests {
         }
 
         let opts = SegmentationOptions::default_for_scale(
-            4.0,                 // 4 px/mm → image is 50 × 40 mm
+            4.0, // 4 px/mm → image is 50 × 40 mm
             bounds_for(50.0, 40.0),
-            20.0,                // fake board is 20×15 mm starting at origin
+            20.0, // fake board is 20×15 mm starting at origin
             15.0,
             0.0,
             10.0,
@@ -1200,6 +1209,48 @@ mod tests {
             "piece bbox leaked into board region: {:?}",
             result.piece_bbox_px
         );
+    }
+
+    #[test]
+    fn board_candidate_rejection_ignores_invalid_exclusion_bbox() {
+        let w = 120u32;
+        let h = 90u32;
+        let mut labels: Image<Luma<u32>> = Image::from_pixel(w, h, Luma([0u32]));
+
+        // Label 1 simulates the reference-board printout paper: it surrounds
+        // and contains the board footprint, so it must not be selected even
+        // though it is much larger than the real piece.
+        for y in 0..85 {
+            for x in 0..75 {
+                labels.put_pixel(x, y, Luma([1]));
+            }
+        }
+        // The board itself has already been zeroed out by the exclusion mask.
+        for y in 10..70 {
+            for x in 10..60 {
+                labels.put_pixel(x, y, Luma([0]));
+            }
+        }
+        // Label 2 is the pattern piece to the right of the board.
+        for y in 25..75 {
+            for x in 82..112 {
+                labels.put_pixel(x, y, Luma([2]));
+            }
+        }
+
+        let opts = SegmentationOptions::default_for_scale(
+            2.0,
+            bounds_for(60.0, 45.0),
+            25.0,
+            30.0,
+            0.0,
+            5.0,
+        );
+        let board_rect = board_exclusion_rect_px(w, h, &opts);
+        let chosen = choose_piece_component(&labels, board_rect, &opts, w, h).unwrap();
+
+        assert_eq!(chosen.label, 2);
+        assert_eq!(chosen.bbox.min_x, 82);
     }
 
     #[test]
