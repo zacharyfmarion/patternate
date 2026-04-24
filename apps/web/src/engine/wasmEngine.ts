@@ -77,6 +77,7 @@ export const wasmEngine: EngineBridge = {
             dxf: outline.dxf as string,
             json: outline.json,
             polygonMm: outline.polygonMm as Array<[number, number]>,
+            rawPolygonMm: outline.rawPolygonMm as Array<[number, number]>,
             metadata: outline.metadata as NonNullable<RectifyResult['outline']>['metadata'],
             maskPng: outline.maskPng as Uint8Array,
           }

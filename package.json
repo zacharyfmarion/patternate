@@ -4,11 +4,12 @@
     "apps/web"
   ],
   "scripts": {
-    "dev:web": "yarn workspace web dev",
+    "dev:web": "yarn build:wasm && yarn workspace web dev",
     "dev:desktop": "cd apps/tauri/src-tauri && cargo tauri dev",
-    "build:web": "yarn workspace web build",
+    "build:web": "yarn build:wasm && yarn workspace web build",
     "build:wasm": "yarn workspace web build:wasm",
-    "lint": "yarn workspace web lint"
+    "test:web": "yarn workspace web test",
+    "validate:web": "yarn test:web && yarn build:web"
   },
   "packageManager": "yarn@3.4.1"
 }

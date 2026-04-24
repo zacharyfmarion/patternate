@@ -24,7 +24,7 @@ Before changing code, read the materials that define the current task and touche
 2. `Cargo.toml`
 3. `package.json`
 4. `apps/web/package.json` when the change may touch the web app
-5. `.github/PULL_REQUEST_TEMPLATE.md`
+5. `.github/PULL_REQUEST_TEMPLATE.md` when it exists
 
 Read additional feature-local files before editing instead of relying on assumptions.
 
@@ -41,6 +41,7 @@ Instead:
 Default readiness expectations:
 
 - Use `yarn install --immutable` from the repo root when web validation needs packages.
+- Respect the repo's committed Yarn linker settings such as `.yarnrc.yml`. If the repo has no committed linker config, treat that as a repo issue and prefer fixing the repo before blaming the feature change.
 - Use `cargo metadata --no-deps` or `cargo check` to confirm Rust tooling is available when Rust crates are in scope.
 - Treat Tauri as an extra validation surface only when the change touches `apps/tauri/` or shared Rust code consumed by Tauri.
 
@@ -103,11 +104,18 @@ cargo test --workspace
 Run from the repo root:
 
 ```bash
-yarn lint
+yarn validate:web
+```
+
+If the repo does not expose `yarn validate:web`, fall back to:
+
+```bash
 yarn workspace web test
+yarn build:wasm
 yarn workspace web build
 ```
 
+If the repo exposes an additional lint command and it runs cleanly, include it. Do not assume `yarn lint` exists in every repo.
 ### WASM bridge changes under `rectify-wasm/` or web/WASM integration
 
 Run from the repo root:
@@ -137,7 +145,7 @@ Unless the user asked otherwise, open a PR against `main`.
 Before creating the PR:
 
 1. Confirm the working tree contains only intended changes.
-2. Fill the PR body using `.github/PULL_REQUEST_TEMPLATE.md`.
+2. Fill the PR body using `.github/PULL_REQUEST_TEMPLATE.md` when present, otherwise synthesize the same sections yourself.
 3. Include the implementation plan path in the PR notes when one was created.
 4. Summarize tests added, validations run, and intentionally skipped checks.
 
@@ -157,3 +165,4 @@ If no preview workflow exists, explicitly say so in the handoff instead of imply
 - Do not skip the implementation plan for non-trivial work.
 - Do not open the PR before the required local validation for the touched area succeeds.
 - Do not target a base branch other than `main` unless the user explicitly says so.
+- If the skill's own assumptions conflict with the repo's checked-in reality, update the repo-local workflow files or the skill itself when the user asks so future agents inherit the fix.

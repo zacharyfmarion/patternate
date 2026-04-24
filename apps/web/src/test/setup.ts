@@ -10,7 +10,8 @@ const pipelineActionDefaults = {
   setInput: usePipelineStore.getState().setInput,
   clearInput: usePipelineStore.getState().clearInput,
   run: usePipelineStore.getState().run,
-  rerunOutline: usePipelineStore.getState().rerunOutline,
+  resimplify: usePipelineStore.getState().resimplify,
+  patchOutlinePolygon: usePipelineStore.getState().patchOutlinePolygon,
   pushToast: usePipelineStore.getState().pushToast,
   clearToasts: usePipelineStore.getState().clearToasts,
 };
@@ -52,6 +53,15 @@ Object.defineProperty(URL, 'revokeObjectURL', {
   value: vi.fn(),
 });
 
+Object.defineProperty(globalThis, 'createImageBitmap', {
+  writable: true,
+  value: vi.fn(async () => ({
+    width: 1600,
+    height: 900,
+    close: vi.fn(),
+  })),
+});
+
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
   writable: true,
   value: vi.fn(() => ({
@@ -65,6 +75,20 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     arc: vi.fn(),
   })),
 });
+
+if (!SVGElement.prototype.setPointerCapture) {
+  Object.defineProperty(SVGElement.prototype, 'setPointerCapture', {
+    writable: true,
+    value: vi.fn(),
+  });
+}
+
+if (!SVGElement.prototype.releasePointerCapture) {
+  Object.defineProperty(SVGElement.prototype, 'releasePointerCapture', {
+    writable: true,
+    value: vi.fn(),
+  });
+}
 
 beforeEach(() => {
   cleanup();
@@ -82,6 +106,7 @@ beforeEach(() => {
     rectifiedUrl: null,
     maskUrl: null,
     runProgress: [],
+    resimplifyStatus: 'idle',
     toasts: [],
     ...pipelineActionDefaults,
   });

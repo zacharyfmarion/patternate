@@ -83,11 +83,10 @@ export function EditOverlay({
 
   const clientToMm = useCallback(
     (clientX: number, clientY: number): Point => {
-      const svg = svgRef.current;
-      if (!svg) return [0, 0];
-      const rect = svg.getBoundingClientRect();
-      const sx = (clientX - rect.left) / rect.width;
-      const sy = (clientY - rect.top) / rect.height;
+      const frame = getRenderedImageRect(svgRef.current, widthPx, heightPx);
+      if (!frame) return [0, 0];
+      const sx = (clientX - frame.left) / frame.width;
+      const sy = (clientY - frame.top) / frame.height;
       const xPx = sx * widthPx;
       const yPx = sy * heightPx;
       return [originMm[0] + xPx / pxPerMm, originMm[1] + yPx / pxPerMm];
@@ -98,15 +97,14 @@ export function EditOverlay({
   // Convert a client-space rect to SVG viewBox space.
   const clientRectToSvg = useCallback(
     (x1: number, y1: number, x2: number, y2: number) => {
-      const svg = svgRef.current;
-      if (!svg) return { x: 0, y: 0, w: 0, h: 0 };
-      const rect = svg.getBoundingClientRect();
+      const rect = getRenderedImageRect(svgRef.current, widthPx, heightPx);
+      if (!rect) return { x: 0, y: 0, w: 0, h: 0 };
       const scaleX = widthPx / rect.width;
       const scaleY = heightPx / rect.height;
-      const sx1 = (x1 - rect.left) * scaleX;
-      const sy1 = (y1 - rect.top) * scaleY;
-      const sx2 = (x2 - rect.left) * scaleX;
-      const sy2 = (y2 - rect.top) * scaleY;
+      const sx1 = clamp((x1 - rect.left) * scaleX, 0, widthPx);
+      const sy1 = clamp((y1 - rect.top) * scaleY, 0, heightPx);
+      const sx2 = clamp((x2 - rect.left) * scaleX, 0, widthPx);
+      const sy2 = clamp((y2 - rect.top) * scaleY, 0, heightPx);
       return {
         x: Math.min(sx1, sx2),
         y: Math.min(sy1, sy2),
@@ -142,6 +140,7 @@ export function EditOverlay({
 
   const onPointerDownAnchor = useCallback(
     (e: React.PointerEvent<SVGElement>, id: string) => {
+      if (e.shiftKey) return;
       e.stopPropagation();
       e.preventDefault();
       if (activeTool === 'pen') {
@@ -151,7 +150,7 @@ export function EditOverlay({
         setNodeKind(id, n.kind === 'corner' ? 'smooth' : 'corner');
         return;
       }
-      const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+      const additive = e.metaKey || e.ctrlKey;
       let ids = selectedIds;
       if (!selectedIds.includes(id)) {
         toggleSelection(id, additive);
@@ -176,6 +175,7 @@ export function EditOverlay({
       id: string,
       which: 'in' | 'out',
     ) => {
+      if (e.shiftKey) return;
       e.stopPropagation();
       e.preventDefault();
       beginInteraction();
@@ -200,6 +200,7 @@ export function EditOverlay({
 
   const onPointerDownSegment = useCallback(
     (e: React.PointerEvent<SVGPathElement>) => {
+      if (e.shiftKey) return;
       e.stopPropagation();
       e.preventDefault();
       if (activeTool !== 'select' || !spline) return;
@@ -208,11 +209,16 @@ export function EditOverlay({
       if (!hit) return;
       // beginInteraction is deferred to the first actual pointer move so that
       // a plain click (no drag) doesn't create a spurious undo entry.
-      const next: DragState = { kind: 'segment', segmentIndex: hit.segmentIndex, t: hit.t, interactionStarted: false };
+      const next: DragState = {
+        kind: 'segment',
+        segmentIndex: hit.segmentIndex,
+        t: hit.t,
+        interactionStarted: false,
+      };
       setDragging(next);
       (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
     },
-    [activeTool, beginInteraction, clientToMm, spline],
+    [activeTool, clientToMm, spline],
   );
 
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
@@ -240,8 +246,9 @@ export function EditOverlay({
           x: d.startClientX,
           y: d.startClientY,
         };
-        const scaleX = svgClientScale(svgRef.current, widthPx);
-        const scaleY = svgClientScaleY(svgRef.current, heightPx);
+        const frame = getRenderedImageRect(svgRef.current, widthPx, heightPx);
+        const scaleX = frame ? frame.width / widthPx : 1;
+        const scaleY = frame ? frame.height / heightPx : 1;
         const incDxMm = (e.clientX - last.x) / scaleX / pxPerMm;
         const incDyMm = (e.clientY - last.y) / scaleY / pxPerMm;
         lastPointerRef.current = { x: e.clientX, y: e.clientY };
@@ -253,8 +260,9 @@ export function EditOverlay({
       } else if (d.kind === 'segment') {
         const last = lastPointerRef.current;
         if (last) {
-          const scaleX = svgClientScale(svgRef.current, widthPx);
-          const scaleY = svgClientScaleY(svgRef.current, heightPx);
+          const frame = getRenderedImageRect(svgRef.current, widthPx, heightPx);
+          const scaleX = frame ? frame.width / widthPx : 1;
+          const scaleY = frame ? frame.height / heightPx : 1;
           const dx = (e.clientX - last.x) / scaleX / pxPerMm;
           const dy = (e.clientY - last.y) / scaleY / pxPerMm;
           if (dx !== 0 || dy !== 0) {
@@ -274,7 +282,7 @@ export function EditOverlay({
         });
       }
     },
-    [activeTool, clientToMm, heightPx, moveHandle, moveNodes, moveSegment, penSnapPx, pxPerMm, spline, widthPx],
+    [activeTool, beginInteraction, clientToMm, heightPx, moveHandle, moveNodes, moveSegment, penSnapPx, pxPerMm, spline, widthPx],
   );
 
   const endDrag = useCallback(() => {
@@ -309,10 +317,9 @@ export function EditOverlay({
       }
     } else if (d.kind === 'segment') {
       if (d.interactionStarted) commitInteraction();
-    } else if (d.kind !== 'marquee') {
+    } else if (d.kind === 'anchor' || d.kind === 'handle') {
       commitInteraction();
     }
-
     setDragging(null);
     lastPointerRef.current = null;
   }, [clearSelection, clientRectToSvg, commitInteraction, originMm, pxPerMm, setSelection, spline]);
@@ -323,6 +330,7 @@ export function EditOverlay({
   const onBackgroundPointerDown = useCallback(
     (e: React.PointerEvent<SVGElement>) => {
       if (e.button !== 0) return;
+      if (e.shiftKey) return;
       if (activeTool === 'pen' && spline) {
         const mm = clientToMm(e.clientX, e.clientY);
         const hit = projectPointToSpline(spline, mm);
@@ -379,7 +387,7 @@ export function EditOverlay({
       ref={svgRef}
       className={`pd-edit-overlay pd-edit-tool-${activeTool}`}
       viewBox={`0 0 ${widthPx} ${heightPx}`}
-      preserveAspectRatio="xMinYMin meet"
+      preserveAspectRatio="xMidYMid meet"
       style={{ width: '100%', height: '100%' }}
       onPointerDown={onBackgroundPointerDown}
       onPointerMove={onPointerMove}
@@ -780,16 +788,25 @@ export function useEditKeyboardShortcuts() {
 // Internals
 // ---------------------------------------------------------------------------
 
-function svgClientScale(svg: SVGSVGElement | null, naturalWidth: number): number {
-  if (!svg || naturalWidth === 0) return 1;
+function getRenderedImageRect(
+  svg: SVGSVGElement | null,
+  naturalWidth: number,
+  naturalHeight: number,
+) {
+  if (!svg || naturalWidth === 0 || naturalHeight === 0) return null;
   const rect = svg.getBoundingClientRect();
-  if (rect.width === 0) return 1;
-  return rect.width / naturalWidth;
+  if (rect.width === 0 || rect.height === 0) return null;
+  const scale = Math.min(rect.width / naturalWidth, rect.height / naturalHeight);
+  const width = naturalWidth * scale;
+  const height = naturalHeight * scale;
+  return {
+    left: rect.left + (rect.width - width) / 2,
+    top: rect.top + (rect.height - height) / 2,
+    width,
+    height,
+  };
 }
 
-function svgClientScaleY(svg: SVGSVGElement | null, naturalHeight: number): number {
-  if (!svg || naturalHeight === 0) return 1;
-  const rect = svg.getBoundingClientRect();
-  if (rect.height === 0) return 1;
-  return rect.height / naturalHeight;
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
